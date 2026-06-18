@@ -47,14 +47,7 @@ body.embed .chart-wrap,body.embed .wide .chart-wrap{height:172px}
 body.embed .funnel{gap:5px;padding:0}
 body.embed .funnel-row{height:27px;font-size:10px}
 body.embed .funnel-row span:last-child{font-size:12px}
-body.embed .table-card{margin-top:7px;padding-top:10px;border-radius:10px;box-shadow:none}
-body.embed .table-heading{padding:0 10px;margin-bottom:6px}
-body.embed .table-heading small{display:none}
-body.embed .table-heading h2{font-size:12px}
-body.embed .search input{min-width:180px;padding:5px;font-size:10px}
-body.embed th,body.embed td{padding:8px 10px;font-size:10px}
-body.embed th{font-size:9px}
-body.embed .table-footer{padding:7px 10px}
+body.embed .table-card{display:none}
 body.embed .toast{right:12px;bottom:12px;font-size:11px}
 @media(max-width:700px){
   body.embed .kpi-grid{grid-template-columns:repeat(3,1fr)}
