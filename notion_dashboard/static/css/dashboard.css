@@ -1,5 +1,6 @@
 :root{--bg:#07101f;--panel:#0d1829;--panel2:#111f33;--line:#203149;--text:#edf4ff;--muted:#8fa2bb;--blue:#4f8cff;--purple:#8b6cff;--green:#2ed3a3;--red:#ff5e6c;--orange:#ff9d55;--yellow:#f4ca55;--shadow:0 16px 36px rgba(0,0,0,.23)}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 70% -10%,#142b4c 0,transparent 30%),var(--bg);color:var(--text);font:14px/1.5 Inter,Pretendard,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.embed-topbar{display:none}
 button,input,select{font:inherit}.shell{min-height:100vh}.sidebar{position:fixed;inset:0 auto 0 0;width:238px;background:rgba(8,18,32,.94);border-right:1px solid var(--line);padding:28px 20px;display:flex;flex-direction:column;z-index:10;backdrop-filter:blur(18px)}
 .brand{display:flex;gap:12px;align-items:center;margin-bottom:42px}.brand-mark{display:grid;place-items:center;width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--blue),var(--purple));font-weight:800;font-size:19px;box-shadow:0 8px 25px #4f8cff45}.brand strong,.brand small{display:block}.brand small{color:var(--muted);font-size:11px;letter-spacing:.04em}
 nav{display:grid;gap:8px}nav a{color:var(--muted);text-decoration:none;padding:11px 13px;border-radius:9px;display:flex;gap:12px;align-items:center;font-weight:600}nav a.active,nav a:hover{color:var(--text);background:#15253b}.side-status{margin-top:auto;border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;align-items:center;gap:10px;background:#0b1728}.side-status strong,.side-status small{display:block;font-size:11px}.side-status small{color:var(--muted)}.pulse,.status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 5px #2ed3a31b}
@@ -14,3 +15,50 @@ main{margin-left:238px;padding:32px clamp(22px,4vw,56px) 60px;max-width:1800px}h
 body.light{--bg:#edf2f8;--panel:#fff;--panel2:#f6f8fb;--line:#dbe3ed;--text:#162235;--muted:#687b91;--shadow:0 12px 30px rgba(36,55,78,.08);background:var(--bg)}body.light .sidebar{background:#fff}body.light .card{background:#fff}body.light .segmented,body.light input,body.light select,body.light .search{background:#f3f6fa}body.light .sync-strip span:last-child{background:#e5ebf3}
 @media(max-width:1180px){.kpi-grid{grid-template-columns:repeat(3,1fr)}.compact{margin-left:0}}@media(max-width:820px){.sidebar{position:static;width:auto;height:auto;padding:16px 20px;flex-direction:row;align-items:center}.brand{margin:0}.sidebar nav,.side-status{display:none}main{margin:0;padding:24px 16px}.kpi-grid{grid-template-columns:repeat(2,1fr)}.chart-grid{grid-template-columns:1fr}.chart-card.wide{grid-column:auto}header{align-items:center}.subtitle{display:none}.filters{gap:12px}.segmented{overflow:auto;max-width:100%}}@media(max-width:520px){.kpi-grid{grid-template-columns:1fr}.header-actions .primary-button{font-size:0}.header-actions .primary-button span{font-size:18px}.filters{display:block}.filter-group,.date-fields{margin-bottom:12px}.segmented{display:grid;grid-template-columns:repeat(3,1fr)}.chart-card{padding:15px}.search input{min-width:150px}}
 
+/* Notion embed mode: append ?embed=1 to the dashboard URL. */
+body.embed{background:var(--bg);overflow-x:hidden}
+body.embed .embed-topbar{position:sticky;top:0;z-index:30;height:44px;padding:0 14px;display:flex;align-items:center;justify-content:space-between;background:rgba(8,18,32,.96);border-bottom:1px solid var(--line);backdrop-filter:blur(14px)}
+body.embed.light .embed-topbar{background:rgba(255,255,255,.96)}
+body.embed .embed-topbar>div{display:flex;align-items:center;gap:8px}
+body.embed .embed-topbar strong{font-size:13px}
+body.embed #embedSync{color:var(--muted);font-size:10px}
+.embed-refresh{width:30px;height:30px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--text);cursor:pointer}
+body.embed .sidebar,body.embed main>header,body.embed .sync-strip{display:none}
+body.embed main{margin:0;padding:10px;max-width:none}
+body.embed .filters{padding:9px 10px;margin-bottom:8px;gap:10px;border-radius:10px;box-shadow:none}
+body.embed .filters label{display:none}
+body.embed .segmented button{padding:5px 8px;font-size:10px}
+body.embed .compact select{min-width:105px;padding:6px 8px;font-size:10px}
+body.embed .date-fields input{padding:6px;font-size:10px}
+body.embed .kpi-grid{grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:7px}
+body.embed .kpi{min-height:66px;padding:10px;gap:8px;border-radius:10px;box-shadow:none}
+body.embed .kpi-icon{width:28px;height:28px;border-radius:8px;font-size:11px}
+body.embed .kpi small{font-size:9px;margin:0}
+body.embed .kpi strong{font-size:20px}
+body.embed .kpi em{font-size:9px}
+body.embed .chart-grid{grid-template-columns:1.35fr 1fr;gap:7px}
+body.embed .chart-card{min-height:220px;padding:11px;border-radius:10px;box-shadow:none}
+body.embed .chart-card.wide{grid-column:auto}
+body.embed .chart-card.embed-secondary{display:none}
+body.embed .card-heading{margin-bottom:5px}
+body.embed .card-heading small,body.embed .chart-caption{display:none}
+body.embed .card-heading h2{font-size:12px}
+body.embed .chart-wrap,body.embed .wide .chart-wrap{height:172px}
+body.embed .funnel{gap:5px;padding:0}
+body.embed .funnel-row{height:27px;font-size:10px}
+body.embed .funnel-row span:last-child{font-size:12px}
+body.embed .table-card{margin-top:7px;padding-top:10px;border-radius:10px;box-shadow:none}
+body.embed .table-heading{padding:0 10px;margin-bottom:6px}
+body.embed .table-heading small{display:none}
+body.embed .table-heading h2{font-size:12px}
+body.embed .search input{min-width:180px;padding:5px;font-size:10px}
+body.embed th,body.embed td{padding:8px 10px;font-size:10px}
+body.embed th{font-size:9px}
+body.embed .table-footer{padding:7px 10px}
+body.embed .toast{right:12px;bottom:12px;font-size:11px}
+@media(max-width:700px){
+  body.embed .kpi-grid{grid-template-columns:repeat(3,1fr)}
+  body.embed .chart-grid{grid-template-columns:1fr}
+  body.embed .filters{overflow:auto;flex-wrap:nowrap}
+  body.embed .segmented{min-width:max-content}
+}

@@ -9,6 +9,14 @@
   <style>{{ css | safe }}</style>
 </head>
 <body>
+  <div class="embed-topbar">
+    <div>
+      <span class="status-dot"></span>
+      <strong>장애 현황</strong>
+      <span id="embedSync">동기화 확인 중</span>
+    </div>
+    <button id="embedRefresh" class="embed-refresh" title="새로고침">↻</button>
+  </div>
   <div class="shell">
     <aside class="sidebar">
       <div class="brand">
@@ -89,23 +97,23 @@
           <div class="card-heading"><div><small>FLOW</small><h2>장애 처리 퍼널</h2></div></div>
           <div id="funnelChart" class="funnel"></div>
         </article>
-        <article class="card chart-card">
+        <article class="card chart-card embed-secondary">
           <div class="card-heading"><div><small>CLASSIFICATION</small><h2>장애 구분별</h2></div></div>
           <div class="chart-wrap"><canvas id="categoryChart"></canvas></div>
         </article>
-        <article class="card chart-card">
+        <article class="card chart-card embed-secondary">
           <div class="card-heading"><div><small>SEVERITY</small><h2>영향도별 장애</h2></div></div>
           <div class="chart-wrap"><canvas id="impactChart"></canvas></div>
         </article>
-        <article class="card chart-card">
+        <article class="card chart-card embed-secondary">
           <div class="card-heading"><div><small>PRIORITY</small><h2>등급별 장애</h2></div></div>
           <div class="chart-wrap"><canvas id="gradeChart"></canvas></div>
         </article>
-        <article class="card chart-card">
+        <article class="card chart-card embed-secondary">
           <div class="card-heading"><div><small>OWNERSHIP</small><h2>담당자별 처리 건수</h2></div></div>
           <div class="chart-wrap"><canvas id="assigneeChart"></canvas></div>
         </article>
-        <article class="card chart-card">
+        <article class="card chart-card embed-secondary">
           <div class="card-heading"><div><small>RECOVERY SPEED</small><h2>월별 평균 MTTR</h2></div></div>
           <div class="chart-wrap"><canvas id="mttrChart"></canvas></div>
         </article>
@@ -137,4 +145,3 @@
   <script>{{ js | safe }}</script>
 </body>
 </html>
-

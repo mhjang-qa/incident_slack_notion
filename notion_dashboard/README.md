@@ -56,9 +56,20 @@ Render 환경변수에 `NOTION_TOKEN`, `NOTION_DATABASE_ID`를 등록합니다.
 워크플로는 6시간마다 정적 페이지를 재생성합니다. GitHub Pages는 백엔드가 없으므로
 5분 실시간 갱신이 필요하면 Render의 FastAPI 모드를 사용해야 합니다.
 
+### Notion 임베드
+
+Notion에는 전체 Dashboard URL 뒤에 `?embed=1`을 붙인 주소를 사용합니다.
+
+```text
+https://mhjang-qa.github.io/incident_slack_notion/?embed=1
+```
+
+임베드 모드는 좌측 메뉴와 큰 헤더를 숨기고 KPI, 월별 추이, 처리 퍼널, 최근 장애만
+컴팩트하게 표시합니다. Notion에서 `/embed` 블록을 만든 뒤 위 URL을 입력하고 블록 너비를
+페이지 전체 너비에 맞추는 것을 권장합니다.
+
 ## 테스트
 
 ```bash
 python -m unittest discover -s notion_dashboard/tests -v
 ```
-

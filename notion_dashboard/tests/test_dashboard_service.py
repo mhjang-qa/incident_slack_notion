@@ -15,6 +15,8 @@ class DashboardServiceTest(unittest.TestCase):
         self.assertIn("window.DASHBOARD_DATA", html)
         self.assertIn("window.STATIC_MODE = true", html)
         self.assertIn("chart.umd.min.js", html)
+        self.assertIn("embed-topbar", html)
+        self.assertIn('get("embed") === "1"', html)
 
     def test_render_escapes_script_terminator_in_embedded_data(self) -> None:
         project_dir = Path(__file__).resolve().parents[1]

@@ -1,4 +1,6 @@
 (() => {
+  const embedMode = new URLSearchParams(location.search).get("embed") === "1";
+  if (embedMode) document.body.classList.add("embed");
   const state = { data: window.DASHBOARD_DATA || {incidents:[]}, period:"year", sort:{key:"date",dir:-1}, charts:{} };
   const colors = {blue:"#4f8cff",purple:"#8b6cff",green:"#2ed3a3",red:"#ff5e6c",orange:"#ff9d55",yellow:"#f4ca55",muted:"#7388a3"};
   const $ = id => document.getElementById(id);
@@ -93,7 +95,7 @@
 
   function esc(value){ const div=document.createElement("div"); div.textContent=value??""; return div.innerHTML; }
   function render(){ const items=filtered(); renderKpis(items); renderCharts(items); renderTable(items); }
-  function syncLabels(){ const date=new Date(state.data.synced_at); const text=isNaN(date)?"-":date.toLocaleString("ko-KR"); $("syncTime").textContent=`마지막 동기화 ${text}`; $("sideSync").textContent=text; }
+  function syncLabels(){ const date=new Date(state.data.synced_at); const text=isNaN(date)?"-":date.toLocaleString("ko-KR"); $("syncTime").textContent=`마지막 동기화 ${text}`; $("sideSync").textContent=text; $("embedSync").textContent=text; }
   function options(id,key){ const values=[...new Set(state.data.incidents.map(i=>i[key]).filter(Boolean))].sort(); $(id).innerHTML=`<option value="">전체 ${key==="category"?"구분":"영향도"}</option>`+values.map(v=>`<option>${esc(v)}</option>`).join(""); }
   function toast(message,error=false){ const el=$("toast"); el.textContent=message; el.className=`toast show${error?" error":""}`; setTimeout(()=>el.className="toast",3200); }
 
@@ -109,9 +111,9 @@
   $("tableSearch").addEventListener("input",()=>renderTable(filtered()));
   document.querySelectorAll("th[data-sort]").forEach(th=>th.addEventListener("click",()=>{ const key=th.dataset.sort; state.sort={key,dir:state.sort.key===key?-state.sort.dir:-1}; renderTable(filtered()); }));
   $("refreshButton").addEventListener("click",refresh);
+  $("embedRefresh").addEventListener("click",refresh);
   $("themeButton").addEventListener("click",()=>{ document.body.classList.toggle("light"); localStorage.setItem("dashboard-theme",document.body.classList.contains("light")?"light":"dark"); renderCharts(filtered()); });
   if(localStorage.getItem("dashboard-theme")==="light") document.body.classList.add("light");
   options("categoryFilter","category"); options("impactFilter","impact"); syncLabels(); render();
   if(!window.STATIC_MODE) setInterval(refresh,300000);
 })();
-
