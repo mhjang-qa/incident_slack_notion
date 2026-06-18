@@ -21,10 +21,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -34,12 +34,32 @@ jobs:
         run: pip install -r incident_slack_notion/requirements.txt
 
       - name: Restore incident mapping
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: incident_mapping.db
           key: incident-state-${{ github.run_id }}
           restore-keys: |
             incident-state-
+
+      - name: Validate integration settings
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ vars.SLACK_CHANNEL_ID }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ vars.NOTION_DATABASE_ID }}
+        shell: bash
+        run: |
+          missing=0
+          for name in SLACK_BOT_TOKEN SLACK_CHANNEL_ID NOTION_TOKEN NOTION_DATABASE_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error title=Missing Actions setting::$name is not configured"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Configure the missing values in Settings > Secrets and variables > Actions."
+            exit 1
+          fi
 
       - name: Synchronize Slack incidents to Notion
         env:
