@@ -47,6 +47,7 @@ jobs:
           SLACK_CHANNEL_ID: ${{ vars.SLACK_CHANNEL_ID }}
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DATABASE_ID: ${{ vars.NOTION_DATABASE_ID }}
+          SLACK_NOTIFICATION_CHANNEL: slice_gh-test
           POLL_INTERVAL_SECONDS: "60"
           TIMEZONE: Asia/Seoul
           SLACK_LOOKBACK_HOURS: "72"

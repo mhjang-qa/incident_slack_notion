@@ -20,6 +20,7 @@ class Settings:
     timezone: str = "Asia/Seoul"
     database_path: str = "incident_mapping.db"
     slack_lookback_hours: int = 72
+    slack_notification_channel: str = "slice_gh-test"
     log_level: str = "INFO"
 
     @property
@@ -52,6 +53,8 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
         timezone=os.getenv("TIMEZONE", "Asia/Seoul"),
         database_path=os.getenv("DATABASE_PATH", "incident_mapping.db"),
         slack_lookback_hours=int(os.getenv("SLACK_LOOKBACK_HOURS", "72")),
+        slack_notification_channel=os.getenv(
+            "SLACK_NOTIFICATION_CHANNEL", "slice_gh-test"
+        ).strip(),
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
     )
-

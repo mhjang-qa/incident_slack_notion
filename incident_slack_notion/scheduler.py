@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-
-from apscheduler.schedulers.blocking import BlockingScheduler
-from apscheduler.triggers.interval import IntervalTrigger
+from typing import TYPE_CHECKING
 
 from .config import Settings
-from .notion_client import NotionIncidentClient
 from .parser import apply_thread, is_incident_candidate, parse_incident
-from .slack_client import SlackIncidentClient
 from .storage import Storage
+
+if TYPE_CHECKING:
+    from .notion_client import NotionIncidentClient
+    from .slack_client import SlackIncidentClient
 
 LOGGER = logging.getLogger(__name__)
 
@@ -33,9 +33,11 @@ class IncidentSynchronizer:
     def run_once(self) -> None:
         """Run one idempotent collection/update cycle."""
         try:
-            self._collect_new_incidents()
+            created_count = self._collect_new_incidents()
         except Exception:
             LOGGER.exception("Slack 신규 메시지 수집 실패")
+            # A failed collection must never be reported as "no incidents."
+            return
 
         # Track all known threads independently, so a late recovery update is
         # still processed even when channel history lookback no longer includes it.
@@ -45,13 +47,27 @@ class IncidentSynchronizer:
             except Exception:
                 LOGGER.exception("스레드 조회/업데이트 실패: %s", mapping.thread_ts)
 
-    def _collect_new_incidents(self) -> None:
+        if created_count == 0 and self.settings.slack_notification_channel:
+            try:
+                self.slack.post_no_incident_notification(
+                    self.settings.slack_notification_channel,
+                    datetime.now(tz=self.settings.tz),
+                    self.settings.slack_lookback_hours,
+                )
+            except Exception:
+                LOGGER.exception(
+                    "장애 없음 Slack 알림 실패: %s",
+                    self.settings.slack_notification_channel,
+                )
+
+    def _collect_new_incidents(self) -> int:
         oldest = (
             datetime.now(tz=self.settings.tz)
             - timedelta(hours=self.settings.slack_lookback_hours)
         ).timestamp()
         messages = self.slack.fetch_channel_messages(oldest)
         LOGGER.info("Slack 신규 메시지 수집: %s건", len(messages))
+        created_count = 0
 
         for message in messages:
             if message.is_thread_reply or not is_incident_candidate(message.text):
@@ -66,7 +82,9 @@ class IncidentSynchronizer:
             page_id = self.notion.create_incident(incident)
             last_ts = thread[-1].ts if thread else message.ts
             self.storage.upsert(message.ts, message.thread_ts, page_id, last_ts)
+            created_count += 1
             LOGGER.info("신규 장애 등록: %s", incident.title)
+        return created_count
 
     def _refresh_thread(self, slack_ts: str, thread_ts: str, page_id: str) -> None:
         thread = self.slack.fetch_thread(thread_ts)
@@ -90,6 +108,9 @@ class IncidentSynchronizer:
 
 
 def run_scheduler(settings: Settings, synchronizer: IncidentSynchronizer) -> None:
+    from apscheduler.schedulers.blocking import BlockingScheduler
+    from apscheduler.triggers.interval import IntervalTrigger
+
     scheduler = BlockingScheduler(timezone=settings.timezone)
     scheduler.add_job(
         synchronizer.run_once,
@@ -102,4 +123,3 @@ def run_scheduler(settings: Settings, synchronizer: IncidentSynchronizer) -> Non
     )
     LOGGER.info("%s초 간격으로 스케줄러 시작", settings.poll_interval_seconds)
     scheduler.start()
-

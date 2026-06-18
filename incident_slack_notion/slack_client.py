@@ -21,6 +21,7 @@ class SlackIncidentClient:
         self.channel_id = channel_id
         self.timezone = timezone
         self._user_cache: dict[str, str] = {}
+        self._channel_cache: dict[str, str] = {}
 
     def fetch_channel_messages(self, oldest: float) -> list[SlackMessage]:
         raw_messages: list[dict[str, Any]] = []
@@ -57,6 +58,28 @@ class SlackIncidentClient:
             if not cursor:
                 break
         return [self._convert(item) for item in raw_messages if item.get("subtype") is None]
+
+    def post_no_incident_notification(
+        self,
+        target: str,
+        checked_at: datetime,
+        lookback_hours: int,
+    ) -> None:
+        """Post a heartbeat only after a successful cycle with no new incidents."""
+        if not target:
+            return
+        channel_id = self._resolve_channel(target)
+        checked_at_text = checked_at.strftime("%Y-%m-%d %H:%M:%S %Z")
+        self._call(
+            self.client.chat_postMessage,
+            channel=channel_id,
+            text=(
+                f":white_check_mark: 장애 모니터링 정상 확인\n"
+                f"- 확인 시각: {checked_at_text}\n"
+                f"- 최근 {lookback_hours}시간 내 신규 장애: 없음"
+            ),
+        )
+        LOGGER.info("장애 없음 알림 전송: %s", target)
 
     def _convert(self, item: dict[str, Any]) -> SlackMessage:
         ts = str(item["ts"])
@@ -96,6 +119,35 @@ class SlackIncidentClient:
         except SlackApiError:
             return ""
 
+    def _resolve_channel(self, target: str) -> str:
+        normalized = target.lstrip("#")
+        if normalized.startswith(("C", "G", "D")):
+            return normalized
+        if normalized in self._channel_cache:
+            return self._channel_cache[normalized]
+
+        cursor: str | None = None
+        while True:
+            response = self._call(
+                self.client.conversations_list,
+                types="public_channel,private_channel",
+                exclude_archived=True,
+                limit=200,
+                cursor=cursor,
+            )
+            for channel in response.get("channels", []):
+                if channel.get("name") == normalized:
+                    channel_id = str(channel["id"])
+                    self._channel_cache[normalized] = channel_id
+                    return channel_id
+            cursor = response.get("response_metadata", {}).get("next_cursor") or None
+            if not cursor:
+                break
+        raise RuntimeError(
+            f"Slack 알림 채널을 찾을 수 없습니다: {target}. "
+            "채널 ID를 SLACK_NOTIFICATION_CHANNEL에 설정하거나 앱을 채널에 초대하세요."
+        )
+
     @staticmethod
     def _call(method, **kwargs):
         for attempt in range(4):
@@ -108,4 +160,3 @@ class SlackIncidentClient:
                 LOGGER.warning("Slack rate limit: %s초 후 재시도", retry_after)
                 time.sleep(retry_after)
         raise RuntimeError("Slack API 재시도 횟수를 초과했습니다.")
-
