@@ -37,7 +37,7 @@ class IncidentSynchronizer:
         except Exception:
             LOGGER.exception("Slack 신규 메시지 수집 실패")
             # A failed collection must never be reported as "no incidents."
-            return
+            raise
 
         # Track all known threads independently, so a late recovery update is
         # still processed even when channel history lookback no longer includes it.
@@ -48,17 +48,11 @@ class IncidentSynchronizer:
                 LOGGER.exception("스레드 조회/업데이트 실패: %s", mapping.thread_ts)
 
         if created_count == 0 and self.settings.slack_notification_channel:
-            try:
-                self.slack.post_no_incident_notification(
-                    self.settings.slack_notification_channel,
-                    datetime.now(tz=self.settings.tz),
-                    self.settings.slack_lookback_hours,
-                )
-            except Exception:
-                LOGGER.exception(
-                    "장애 없음 Slack 알림 실패: %s",
-                    self.settings.slack_notification_channel,
-                )
+            self.slack.post_no_incident_notification(
+                self.settings.slack_notification_channel,
+                datetime.now(tz=self.settings.tz),
+                self.settings.slack_lookback_hours,
+            )
 
     def _collect_new_incidents(self) -> int:
         oldest = (

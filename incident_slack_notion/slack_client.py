@@ -70,15 +70,25 @@ class SlackIncidentClient:
             return
         channel_id = self._resolve_channel(target)
         checked_at_text = checked_at.strftime("%Y-%m-%d %H:%M:%S %Z")
-        self._call(
-            self.client.chat_postMessage,
-            channel=channel_id,
-            text=(
-                f":white_check_mark: 장애 모니터링 정상 확인\n"
-                f"- 확인 시각: {checked_at_text}\n"
-                f"- 최근 {lookback_hours}시간 내 신규 장애: 없음"
-            ),
-        )
+        try:
+            self._call(
+                self.client.chat_postMessage,
+                channel=channel_id,
+                text=(
+                    f":white_check_mark: 장애 모니터링 정상 확인\n"
+                    f"- 확인 시각: {checked_at_text}\n"
+                    f"- 최근 {lookback_hours}시간 내 신규 장애: 없음"
+                ),
+            )
+        except SlackApiError as exc:
+            error = exc.response.get("error", "unknown_error")
+            guidance = {
+                "missing_scope": "Slack App에 chat:write 권한을 추가하고 앱을 재설치하세요.",
+                "not_in_channel": "Slack App을 알림 채널에 초대하세요.",
+                "channel_not_found": "SLACK_NOTIFICATION_CHANNEL에 정확한 채널 ID를 설정하세요.",
+                "invalid_auth": "SLACK_BOT_TOKEN을 다시 확인하세요.",
+            }.get(error, "Slack App 권한과 채널 설정을 확인하세요.")
+            raise RuntimeError(f"Slack 알림 전송 실패({error}). {guidance}") from exc
         LOGGER.info("장애 없음 알림 전송: %s", target)
 
     def _convert(self, item: dict[str, Any]) -> SlackMessage:
@@ -128,13 +138,21 @@ class SlackIncidentClient:
 
         cursor: str | None = None
         while True:
-            response = self._call(
-                self.client.conversations_list,
-                types="public_channel,private_channel",
-                exclude_archived=True,
-                limit=200,
-                cursor=cursor,
-            )
+            try:
+                response = self._call(
+                    self.client.conversations_list,
+                    types="public_channel,private_channel",
+                    exclude_archived=True,
+                    limit=200,
+                    cursor=cursor,
+                )
+            except SlackApiError as exc:
+                error = exc.response.get("error", "unknown_error")
+                raise RuntimeError(
+                    f"Slack 알림 채널 검색 실패({error}). 채널명을 검색하려면 "
+                    "channels:read 권한이 필요하며, 비공개 채널은 groups:read 권한과 "
+                    "앱 초대가 필요합니다. 가능하면 채널 ID를 사용하세요."
+                ) from exc
             for channel in response.get("channels", []):
                 if channel.get("name") == normalized:
                     channel_id = str(channel["id"])
@@ -145,7 +163,7 @@ class SlackIncidentClient:
                 break
         raise RuntimeError(
             f"Slack 알림 채널을 찾을 수 없습니다: {target}. "
-            "채널 ID를 SLACK_NOTIFICATION_CHANNEL에 설정하거나 앱을 채널에 초대하세요."
+            "채널 ID를 SLACK_NOTIFICATION_CHANNEL에 설정하고 앱을 채널에 초대하세요."
         )
 
     @staticmethod
