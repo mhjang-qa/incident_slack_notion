@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 
 from .config import load_settings
 from .logger import configure_logging
@@ -37,11 +38,13 @@ def main() -> None:
             run_scheduler(settings, synchronizer)
     except KeyboardInterrupt:
         LOGGER.info("사용자 요청으로 종료")
-    except Exception:
+    except Exception as exc:
         LOGGER.exception("애플리케이션 시작 실패")
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            message = str(exc).replace("\r", " ").replace("\n", " ")
+            print(f"::error title=Incident sync failed::{type(exc).__name__}: {message}")
         raise SystemExit(1)
 
 
 if __name__ == "__main__":
     main()
-

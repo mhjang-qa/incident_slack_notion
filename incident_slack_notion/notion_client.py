@@ -55,9 +55,24 @@ class NotionIncidentClient:
     def __init__(self, token: str, database_id: str) -> None:
         self.client = Client(auth=token)
         self.database_id = database_id
-        self.schema = self._call(self.client.databases.retrieve, database_id=database_id)[
-            "properties"
-        ]
+        try:
+            database = self._call(
+                self.client.databases.retrieve, database_id=database_id
+            )
+        except APIResponseError as exc:
+            if exc.code == "object_not_found":
+                raise RuntimeError(
+                    "Notion Database를 찾을 수 없습니다. NOTION_DATABASE_ID가 실제 "
+                    "Database ID인지 확인하고, Database의 연결(Connections)에 "
+                    "Integration을 초대하세요."
+                ) from exc
+            if exc.code == "unauthorized":
+                raise RuntimeError(
+                    "NOTION_TOKEN 인증에 실패했습니다. Internal Integration Secret을 "
+                    "다시 확인하세요."
+                ) from exc
+            raise
+        self.schema = database["properties"]
         self.resolved_names = self._resolve_property_names()
         LOGGER.info("Notion DB 컬럼 매핑: %s", self.resolved_names)
 

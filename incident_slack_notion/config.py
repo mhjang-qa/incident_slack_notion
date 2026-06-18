@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
+
+NOTION_ID_RE = re.compile(r"(?<![0-9a-fA-F])([0-9a-fA-F]{32})(?![0-9a-fA-F])")
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +51,9 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
         slack_bot_token=required["SLACK_BOT_TOKEN"] or "",
         slack_channel_id=required["SLACK_CHANNEL_ID"] or "",
         notion_token=required["NOTION_TOKEN"] or "",
-        notion_database_id=required["NOTION_DATABASE_ID"] or "",
+        notion_database_id=_normalize_notion_database_id(
+            required["NOTION_DATABASE_ID"] or ""
+        ),
         poll_interval_seconds=interval,
         timezone=os.getenv("TIMEZONE", "Asia/Seoul"),
         database_path=os.getenv("DATABASE_PATH", "incident_mapping.db"),
@@ -57,4 +62,20 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
             "SLACK_NOTIFICATION_CHANNEL", "slice_gh-test"
         ).strip(),
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    )
+
+
+def _normalize_notion_database_id(value: str) -> str:
+    """Accept a raw UUID, compact ID, or copied Notion database URL."""
+    cleaned = value.strip()
+    match = NOTION_ID_RE.search(cleaned.replace("-", ""))
+    if not match:
+        raise RuntimeError(
+            "NOTION_DATABASE_ID 형식이 올바르지 않습니다. "
+            "32자리 Database ID 또는 Notion Database URL을 입력하세요."
+        )
+    compact = match.group(1).lower()
+    return (
+        f"{compact[:8]}-{compact[8:12]}-{compact[12:16]}-"
+        f"{compact[16:20]}-{compact[20:]}"
     )
