@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+incident_mapping.db
+incident_mapping.db-shm
+incident_mapping.db-wal
+
