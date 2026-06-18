@@ -55,6 +55,7 @@ class NotionIncidentClient:
     def __init__(self, token: str, database_id: str) -> None:
         self.client = Client(auth=token)
         self.database_id = database_id
+        self.data_source_id: str | None = None
         try:
             database = self._call(
                 self.client.databases.retrieve, database_id=database_id
@@ -72,16 +73,42 @@ class NotionIncidentClient:
                     "다시 확인하세요."
                 ) from exc
             raise
-        self.schema = database["properties"]
+        # Since Notion API 2025-09-03, a database is a container and its
+        # properties belong to a child data source. Preserve the legacy branch
+        # for older response shapes.
+        if "properties" in database:
+            self.schema = database["properties"]
+        else:
+            data_sources = database.get("data_sources", [])
+            if not data_sources:
+                raise RuntimeError(
+                    "Notion Database에 접근 가능한 Data Source가 없습니다. "
+                    "Database 연결 권한을 확인하세요."
+                )
+            self.data_source_id = str(data_sources[0]["id"])
+            data_source = self._call(
+                self.client.data_sources.retrieve,
+                data_source_id=self.data_source_id,
+            )
+            self.schema = data_source["properties"]
         self.resolved_names = self._resolve_property_names()
-        LOGGER.info("Notion DB 컬럼 매핑: %s", self.resolved_names)
+        LOGGER.info(
+            "Notion DB 컬럼 매핑(data_source=%s): %s",
+            self.data_source_id or "legacy",
+            self.resolved_names,
+        )
 
     def create_incident(self, incident: Incident) -> str:
         now = datetime.now(tz=incident.occurred_at.tzinfo if incident.occurred_at else None)
         properties = self._build_properties(incident, now, include_created=True)
+        parent = (
+            {"type": "data_source_id", "data_source_id": self.data_source_id}
+            if self.data_source_id
+            else {"database_id": self.database_id}
+        )
         response = self._call(
             self.client.pages.create,
-            parent={"database_id": self.database_id},
+            parent=parent,
             properties=properties,
         )
         return str(response["id"])
