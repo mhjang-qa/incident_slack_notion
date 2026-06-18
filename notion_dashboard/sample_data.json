@@ -1,0 +1,8 @@
+[
+  {"page_id":"1","notion_url":"https://notion.so/1","title":"오픈뱅킹 기업은행 타임아웃","registered_at":"2026-06-18T09:10:00+09:00","started_at":"2026-06-18T09:02:00+09:00","ended_at":"2026-06-18T09:42:00+09:00","category":"API","impact":"High","grade":"P2","status":"완료","assignee":"Platform QA","cause":"외부 기관 응답 지연","action":"재시도 정책 점검"},
+  {"page_id":"2","notion_url":"https://notion.so/2","title":"회원 인증 응답 지연","registered_at":"2026-06-12T14:15:00+09:00","started_at":"2026-06-12T14:10:00+09:00","ended_at":"2026-06-12T15:22:00+09:00","category":"APP","impact":"Critical","grade":"P1","status":"정상화","assignee":"Mobile QA","cause":"인증 서버 부하","action":"인스턴스 증설"},
+  {"page_id":"3","notion_url":"https://notion.so/3","title":"정산 배치 처리 오류","registered_at":"2026-05-28T23:50:00+09:00","started_at":"2026-05-28T23:45:00+09:00","ended_at":"2026-05-29T00:35:00+09:00","category":"DB","impact":"Medium","grade":"P3","status":"Done","assignee":"Backend QA","cause":"락 경합","action":"쿼리 개선"},
+  {"page_id":"4","notion_url":"https://notion.so/4","title":"운영 콘솔 접속 불가","registered_at":"2026-04-08T11:00:00+09:00","started_at":"2026-04-08T10:55:00+09:00","ended_at":null,"category":"WEB","impact":"Low","grade":"P4","status":"진행중","assignee":"Web QA","cause":"","action":""},
+  {"page_id":"5","notion_url":"https://notion.so/5","title":"송금 API 간헐 오류","registered_at":"2026-03-15T08:40:00+09:00","started_at":"2026-03-15T08:30:00+09:00","ended_at":"2026-03-15T10:05:00+09:00","category":"API","impact":"High","grade":"P2","status":"Resolved","assignee":"Platform QA","cause":"외부망 불안정","action":"회선 모니터링 강화"}
+]
+

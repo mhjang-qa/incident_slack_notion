@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Notion Incident Intelligence</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
+  <style>{{ css | safe }}</style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">H</span>
+        <div><strong>Hanpass</strong><small>Incident Intelligence</small></div>
+      </div>
+      <nav>
+        <a class="active" href="#overview"><span>◫</span>Overview</a>
+        <a href="#trends"><span>⌁</span>Trends</a>
+        <a href="#incidents"><span>≡</span>Incidents</a>
+      </nav>
+      <div class="side-status">
+        <span class="pulse"></span>
+        <div><strong>Notion connected</strong><small id="sideSync">동기화 확인 중</small></div>
+      </div>
+    </aside>
+
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">OPERATIONS / INCIDENTS</p>
+          <h1>장애 현황 Dashboard</h1>
+          <p class="subtitle">운영 안정성과 장애 대응 흐름을 한눈에 확인합니다.</p>
+        </div>
+        <div class="header-actions">
+          <button id="themeButton" class="icon-button" title="테마 변경">◐</button>
+          <button id="refreshButton" class="primary-button">
+            <span>↻</span> Notion 새로고침
+          </button>
+        </div>
+      </header>
+
+      <section class="sync-strip">
+        <div><span class="status-dot"></span><strong>Live analytics</strong></div>
+        <span id="syncTime">마지막 동기화 —</span>
+        <span id="modeLabel">{% if static_mode %}Static snapshot{% else %}5분 자동 갱신{% endif %}</span>
+      </section>
+
+      <section class="filters card">
+        <div class="filter-group">
+          <label>기간</label>
+          <div class="segmented" id="periodButtons">
+            <button data-period="year" class="active">올해</button>
+            <button data-period="3">3개월</button>
+            <button data-period="6">6개월</button>
+            <button data-period="12">12개월</button>
+            <button data-period="custom">사용자 지정</button>
+          </div>
+        </div>
+        <div class="date-fields" id="customDates">
+          <label>시작일<input id="startDate" type="date"></label>
+          <label>종료일<input id="endDate" type="date"></label>
+        </div>
+        <div class="filter-group compact">
+          <label>구분</label>
+          <select id="categoryFilter"><option value="">전체 구분</option></select>
+        </div>
+        <div class="filter-group compact">
+          <label>영향도</label>
+          <select id="impactFilter"><option value="">전체 영향도</option></select>
+        </div>
+      </section>
+
+      <section class="kpi-grid" id="overview">
+        <article class="kpi card"><span class="kpi-icon blue">◎</span><div><small>총 장애 수</small><strong id="totalKpi">0</strong><em>건</em></div></article>
+        <article class="kpi card"><span class="kpi-icon purple">▦</span><div><small>이번 달 장애</small><strong id="monthKpi">0</strong><em>건</em></div></article>
+        <article class="kpi card"><span class="kpi-icon green">◷</span><div><small>평균 처리 시간</small><strong id="mttrKpi">0</strong><em>분</em></div></article>
+        <article class="kpi card"><span class="kpi-icon red">!</span><div><small>Critical 장애</small><strong id="criticalKpi">0</strong><em>건</em></div></article>
+        <article class="kpi card"><span class="kpi-icon amber">△</span><div><small>미조치 장애</small><strong id="openKpi">0</strong><em>건</em></div></article>
+      </section>
+
+      <section class="chart-grid" id="trends">
+        <article class="card chart-card wide">
+          <div class="card-heading"><div><small>TREND</small><h2>월별 장애 추이</h2></div><span class="chart-caption">Incident volume</span></div>
+          <div class="chart-wrap"><canvas id="monthlyChart"></canvas></div>
+        </article>
+        <article class="card chart-card">
+          <div class="card-heading"><div><small>FLOW</small><h2>장애 처리 퍼널</h2></div></div>
+          <div id="funnelChart" class="funnel"></div>
+        </article>
+        <article class="card chart-card">
+          <div class="card-heading"><div><small>CLASSIFICATION</small><h2>장애 구분별</h2></div></div>
+          <div class="chart-wrap"><canvas id="categoryChart"></canvas></div>
+        </article>
+        <article class="card chart-card">
+          <div class="card-heading"><div><small>SEVERITY</small><h2>영향도별 장애</h2></div></div>
+          <div class="chart-wrap"><canvas id="impactChart"></canvas></div>
+        </article>
+        <article class="card chart-card">
+          <div class="card-heading"><div><small>PRIORITY</small><h2>등급별 장애</h2></div></div>
+          <div class="chart-wrap"><canvas id="gradeChart"></canvas></div>
+        </article>
+        <article class="card chart-card">
+          <div class="card-heading"><div><small>OWNERSHIP</small><h2>담당자별 처리 건수</h2></div></div>
+          <div class="chart-wrap"><canvas id="assigneeChart"></canvas></div>
+        </article>
+        <article class="card chart-card">
+          <div class="card-heading"><div><small>RECOVERY SPEED</small><h2>월별 평균 MTTR</h2></div></div>
+          <div class="chart-wrap"><canvas id="mttrChart"></canvas></div>
+        </article>
+      </section>
+
+      <section class="card table-card" id="incidents">
+        <div class="card-heading table-heading">
+          <div><small>LATEST RECORDS</small><h2>최근 장애</h2></div>
+          <div class="search"><span>⌕</span><input id="tableSearch" placeholder="제목, 담당자, 상태 검색"></div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th data-sort="date">등록일 ↕</th><th data-sort="title">제목 ↕</th>
+              <th data-sort="category">구분 ↕</th><th data-sort="impact">영향도 ↕</th>
+              <th data-sort="grade">등급 ↕</th><th data-sort="assignee">담당자 ↕</th>
+              <th data-sort="status">상태 ↕</th><th data-sort="mttr_minutes">처리시간 ↕</th>
+            </tr></thead>
+            <tbody id="incidentTable"></tbody>
+          </table>
+        </div>
+        <div class="table-footer"><span id="tableCount">0건 표시</span><span>최대 20건</span></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script>window.DASHBOARD_DATA = {{ dashboard_data | safe }}; window.STATIC_MODE = {{ 'true' if static_mode else 'false' }};</script>
+  <script>{{ js | safe }}</script>
+</body>
+</html>
+
