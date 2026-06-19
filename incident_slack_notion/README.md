@@ -72,6 +72,7 @@ python -m unittest discover -s incident_slack_notion/tests -v
 - API 오류가 난 스레드는 해당 주기에 실패해도 다음 주기에 다시 조회됩니다.
 - 신규 장애가 없는 정상 실행은 `SLACK_NOTIFICATION_CHANNEL`에 확인 메시지를 보냅니다.
 - Slack 조회 자체가 실패한 경우에는 장애 없음 메시지를 보내지 않아 오탐을 방지합니다.
+- 시작 시 xoxb 토큰의 Bot User 표시 이름이 `Hanpass QA Bot`인지 검증합니다.
 
 ## GitHub Actions 예약 실행
 

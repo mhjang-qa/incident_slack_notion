@@ -23,6 +23,42 @@ class SlackIncidentClient:
         self._user_cache: dict[str, str] = {}
         self._channel_cache: dict[str, str] = {}
 
+    def validate_bot_identity(self, expected_name: str) -> str:
+        """Verify that the xoxb token belongs to the intended Slack bot user."""
+        auth = self._call(self.client.auth_test)
+        user_id = str(auth.get("user_id") or "")
+        if not user_id:
+            raise RuntimeError(
+                "SLACK_BOT_TOKEN에서 Bot User ID를 확인할 수 없습니다. "
+                "Incoming Webhook이나 App Token이 아닌 xoxb Bot User OAuth Token을 사용하세요."
+            )
+
+        user = self._call(self.client.users_info, user=user_id).get("user", {})
+        profile = user.get("profile", {})
+        actual_name = str(
+            profile.get("display_name")
+            or profile.get("real_name")
+            or user.get("real_name")
+            or user.get("name")
+            or auth.get("user")
+            or ""
+        ).strip()
+        LOGGER.info(
+            "Slack Bot identity: app=%s, user_id=%s, name=%s",
+            auth.get("bot_id") or auth.get("user_id"),
+            user_id,
+            actual_name,
+        )
+
+        if expected_name and actual_name.casefold() != expected_name.casefold():
+            raise RuntimeError(
+                f"Slack Bot 표시 이름 불일치: 현재 '{actual_name}', "
+                f"예상 '{expected_name}'. Slack App의 App Home에서 Bot Display Name을 "
+                "수정한 뒤 Reinstall to Workspace를 실행하고, 새 xoxb 토큰으로 "
+                "GitHub Secret SLACK_BOT_TOKEN을 교체하세요."
+            )
+        return actual_name
+
     def fetch_channel_messages(self, oldest: float) -> list[SlackMessage]:
         raw_messages: list[dict[str, Any]] = []
         cursor: str | None = None

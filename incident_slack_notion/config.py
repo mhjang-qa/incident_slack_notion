@@ -24,6 +24,7 @@ class Settings:
     database_path: str = "incident_mapping.db"
     slack_lookback_hours: int = 72
     slack_notification_channel: str = "slice_gh-test"
+    slack_expected_bot_name: str = "Hanpass QA Bot"
     log_level: str = "INFO"
 
     @property
@@ -60,6 +61,9 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
         slack_lookback_hours=int(os.getenv("SLACK_LOOKBACK_HOURS", "72")),
         slack_notification_channel=os.getenv(
             "SLACK_NOTIFICATION_CHANNEL", "slice_gh-test"
+        ).strip(),
+        slack_expected_bot_name=os.getenv(
+            "SLACK_EXPECTED_BOT_NAME", "Hanpass QA Bot"
         ).strip(),
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
     )

@@ -28,6 +28,7 @@ def main() -> None:
         slack = SlackIncidentClient(
             settings.slack_bot_token, settings.slack_channel_id, settings.tz
         )
+        slack.validate_bot_identity(settings.slack_expected_bot_name)
         notion = NotionIncidentClient(
             settings.notion_token, settings.notion_database_id
         )

@@ -27,7 +27,24 @@
 
 토큰은 코드, 문서, Git 저장소에 저장하지 않습니다.
 
-## 3. 확인
+## 3. Bot 표시 이름
+
+메시지는 `xoxb-` Bot Token과 `chat.postMessage`로 전송하며 코드에서 `username`을
+지정하지 않습니다. 따라서 발신자 이름은 Slack App의 Bot User 프로필을 그대로 사용합니다.
+
+표시 이름 변경 절차:
+
+1. Slack App → **App Home → Your App's Presence in Slack**에서 Display Name을
+   `Hanpass QA Bot`으로 변경합니다.
+2. **OAuth & Permissions → Reinstall to Workspace**를 실행합니다.
+3. 발급된 Bot User OAuth Token(`xoxb-...`)으로 GitHub Secret `SLACK_BOT_TOKEN`을
+   교체합니다.
+4. 앱이 채널에서 제거된 경우에만 다시 초대합니다.
+
+실행 시 토큰의 실제 Bot User 프로필을 조회합니다. 이름이 `Hanpass QA Bot`이 아니면
+메시지를 보내기 전에 워크플로를 실패시켜 잘못된 발신자 이름 사용을 방지합니다.
+
+## 4. 확인
 
 앱 실행 시 `missing_scope`, `not_in_channel`, `channel_not_found` 오류가 발생하면 권한,
 워크스페이스 설치 상태, 채널 초대 여부를 순서대로 확인합니다.

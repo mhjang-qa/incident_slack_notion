@@ -68,6 +68,7 @@ jobs:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DATABASE_ID: ${{ vars.NOTION_DATABASE_ID }}
           SLACK_NOTIFICATION_CHANNEL: ${{ vars.SLACK_NOTIFICATION_CHANNEL || 'slice_gh-test' }}
+          SLACK_EXPECTED_BOT_NAME: Hanpass QA Bot
           POLL_INTERVAL_SECONDS: "60"
           TIMEZONE: Asia/Seoul
           SLACK_LOOKBACK_HOURS: "72"
