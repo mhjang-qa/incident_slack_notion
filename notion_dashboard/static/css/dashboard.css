@@ -16,7 +16,8 @@ body.light{--bg:#edf2f8;--panel:#fff;--panel2:#f6f8fb;--line:#dbe3ed;--text:#162
 @media(max-width:1180px){.kpi-grid{grid-template-columns:repeat(3,1fr)}.compact{margin-left:0}}@media(max-width:820px){.sidebar{position:static;width:auto;height:auto;padding:16px 20px;flex-direction:row;align-items:center}.brand{margin:0}.sidebar nav,.side-status{display:none}main{margin:0;padding:24px 16px}.kpi-grid{grid-template-columns:repeat(2,1fr)}.chart-grid{grid-template-columns:1fr}.chart-card.wide{grid-column:auto}header{align-items:center}.subtitle{display:none}.filters{gap:12px}.segmented{overflow:auto;max-width:100%}}@media(max-width:520px){.kpi-grid{grid-template-columns:1fr}.header-actions .primary-button{font-size:0}.header-actions .primary-button span{font-size:18px}.filters{display:block}.filter-group,.date-fields{margin-bottom:12px}.segmented{display:grid;grid-template-columns:repeat(3,1fr)}.chart-card{padding:15px}.search input{min-width:150px}}
 
 /* Notion embed mode: append ?embed=1 to the dashboard URL. */
-body.embed{background:var(--bg);overflow-x:hidden}
+html:has(body.embed),body.embed{height:100%;overflow:hidden}
+body.embed{background:var(--bg)}
 body.embed .embed-topbar{position:sticky;top:0;z-index:30;height:44px;padding:0 14px;display:flex;align-items:center;justify-content:space-between;background:rgba(8,18,32,.96);border-bottom:1px solid var(--line);backdrop-filter:blur(14px)}
 body.embed.light .embed-topbar{background:rgba(255,255,255,.96)}
 body.embed .embed-topbar>div{display:flex;align-items:center;gap:8px}
@@ -24,7 +25,7 @@ body.embed .embed-topbar strong{font-size:13px}
 body.embed #embedSync{color:var(--muted);font-size:10px}
 .embed-refresh{width:30px;height:30px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--text);cursor:pointer}
 body.embed .sidebar,body.embed main>header,body.embed .sync-strip{display:none}
-body.embed main{margin:0;padding:10px;max-width:none}
+body.embed main{margin:0;padding:8px 10px 10px;max-width:none;height:calc(100vh - 44px);display:flex;flex-direction:column;overflow:hidden}
 body.embed .filters{padding:9px 10px;margin-bottom:8px;gap:10px;border-radius:10px;box-shadow:none}
 body.embed .filters label{display:none}
 body.embed .segmented button{padding:5px 8px;font-size:10px}
@@ -36,14 +37,14 @@ body.embed .kpi-icon{width:28px;height:28px;border-radius:8px;font-size:11px}
 body.embed .kpi small{font-size:9px;margin:0}
 body.embed .kpi strong{font-size:20px}
 body.embed .kpi em{font-size:9px}
-body.embed .chart-grid{grid-template-columns:1.35fr 1fr;gap:7px}
-body.embed .chart-card{min-height:220px;padding:11px;border-radius:10px;box-shadow:none}
+body.embed .chart-grid{grid-template-columns:1.35fr 1fr;grid-template-rows:minmax(0,1fr);gap:7px;flex:1;min-height:0}
+body.embed .chart-card{min-height:0;height:100%;padding:11px;border-radius:10px;box-shadow:none;overflow:hidden}
 body.embed .chart-card.wide{grid-column:auto}
 body.embed .chart-card.embed-secondary{display:none}
 body.embed .card-heading{margin-bottom:5px}
 body.embed .card-heading small,body.embed .chart-caption{display:none}
 body.embed .card-heading h2{font-size:12px}
-body.embed .chart-wrap,body.embed .wide .chart-wrap{height:172px}
+body.embed .chart-wrap,body.embed .wide .chart-wrap{height:calc(100% - 24px);min-height:120px}
 body.embed .funnel{gap:5px;padding:0}
 body.embed .funnel-row{height:27px;font-size:10px}
 body.embed .funnel-row span:last-child{font-size:12px}
@@ -51,7 +52,7 @@ body.embed .table-card{display:none}
 body.embed .toast{right:12px;bottom:12px;font-size:11px}
 @media(max-width:700px){
   body.embed .kpi-grid{grid-template-columns:repeat(3,1fr)}
-  body.embed .chart-grid{grid-template-columns:1fr}
+  body.embed .chart-grid{grid-template-columns:1.2fr 1fr}
   body.embed .filters{overflow:auto;flex-wrap:nowrap}
   body.embed .segmented{min-width:max-content}
 }
