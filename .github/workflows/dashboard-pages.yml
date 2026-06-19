@@ -1,6 +1,12 @@
 name: Notion incident dashboard pages
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "notion_dashboard/**"
+      - ".github/workflows/dashboard-pages.yml"
   schedule:
     - cron: "37 */6 * * *"
       timezone: "Asia/Seoul"
@@ -42,4 +48,3 @@ jobs:
       - name: Deploy GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
