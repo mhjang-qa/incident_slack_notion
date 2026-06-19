@@ -24,7 +24,7 @@ class SlackIncidentClient:
         self._channel_cache: dict[str, str] = {}
 
     def validate_bot_identity(self, expected_name: str) -> str:
-        """Verify that the xoxb token belongs to the intended Slack bot user."""
+        """Log the installed bot identity without overriding message authorship."""
         auth = self._call(self.client.auth_test)
         user_id = str(auth.get("user_id") or "")
         if not user_id:
@@ -35,7 +35,7 @@ class SlackIncidentClient:
 
         user = self._call(self.client.users_info, user=user_id).get("user", {})
         profile = user.get("profile", {})
-        actual_name = str(
+        profile_name = str(
             profile.get("display_name")
             or profile.get("real_name")
             or user.get("real_name")
@@ -43,19 +43,34 @@ class SlackIncidentClient:
             or auth.get("user")
             or ""
         ).strip()
+        bot_id = str(auth.get("bot_id") or profile.get("bot_id") or "")
+        bot_info: dict[str, Any] = {}
+        if bot_id:
+            try:
+                bot_info = self._call(self.client.bots_info, bot=bot_id).get("bot", {})
+            except SlackApiError:
+                LOGGER.warning("Slack bots.info 조회 실패: bot_id=%s", bot_id)
+        bot_name = str(bot_info.get("name") or "").strip()
+        actual_name = bot_name or profile_name
         LOGGER.info(
-            "Slack Bot identity: app=%s, user_id=%s, name=%s",
-            auth.get("bot_id") or auth.get("user_id"),
+            "Slack Bot identity: app_id=%s, bot_id=%s, user_id=%s, "
+            "bot_name=%s, profile_name=%s",
+            bot_info.get("app_id") or profile.get("api_app_id") or "",
+            bot_id,
             user_id,
-            actual_name,
+            bot_name,
+            profile_name,
         )
 
         if expected_name and actual_name.casefold() != expected_name.casefold():
-            raise RuntimeError(
-                f"Slack Bot 표시 이름 불일치: 현재 '{actual_name}', "
-                f"예상 '{expected_name}'. Slack App의 App Home에서 Bot Display Name을 "
-                "수정한 뒤 Reinstall to Workspace를 실행하고, 새 xoxb 토큰으로 "
-                "GitHub Secret SLACK_BOT_TOKEN을 교체하세요."
+            # App Home's display name and the installed bot user's profile can
+            # briefly disagree. chat.postMessage remains username-free so Slack
+            # can apply the app identity configured on its side.
+            LOGGER.warning(
+                "Slack Bot 표시 이름 불일치: 현재 '%s', 예상 '%s'. "
+                "전송은 계속하며 Slack 응답의 최종 username을 기록합니다.",
+                actual_name,
+                expected_name,
             )
         return actual_name
 
@@ -107,7 +122,7 @@ class SlackIncidentClient:
         channel_id = self._resolve_channel(target)
         checked_at_text = checked_at.strftime("%Y-%m-%d %H:%M:%S %Z")
         try:
-            self._call(
+            response = self._call(
                 self.client.chat_postMessage,
                 channel=channel_id,
                 text=(
@@ -115,6 +130,14 @@ class SlackIncidentClient:
                     f"- 확인 시각: {checked_at_text}\n"
                     f"- 최근 {lookback_hours}시간 내 신규 장애: 없음"
                 ),
+            )
+            message = response.get("message", {})
+            LOGGER.info(
+                "Slack message posted: channel=%s, ts=%s, username=%s, bot_id=%s",
+                response.get("channel") or channel_id,
+                response.get("ts") or message.get("ts"),
+                message.get("username") or "",
+                message.get("bot_id") or "",
             )
         except SlackApiError as exc:
             error = exc.response.get("error", "unknown_error")
