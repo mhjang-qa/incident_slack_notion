@@ -38,12 +38,18 @@ def parse_incident(message: SlackMessage) -> Incident:
     occurred_at = _extract_first_datetime(text, message.posted_at)
     service = _extract_service(title_source)
     impact = _extract_impact(text)
+    category = _extract_category(text, title_source)
+    severity = _extract_severity(text, impact)
+    scope = _extract_scope(text, title_source, service)
     recovery = is_recovery_message(text)
 
     return Incident(
         title=_wash_title(title_source),
         occurred_at=occurred_at,
         service=service,
+        category=category,
+        severity=severity,
+        scope=scope,
         status="정상화" if recovery else "모니터링 중",
         impact=impact,
         details=_wash_details(text, occurred_at, service, impact),
@@ -127,6 +133,53 @@ def _extract_service(title: str) -> str:
     known = ("오픈뱅킹", "펌뱅킹", "한패스", "송금", "결제", "회원", "인증")
     found = [name for name in known if name in title]
     return "/".join(found)
+
+
+def _extract_category(text: str, title: str) -> str:
+    combined = f"{title}\n{text}"
+    if any(keyword in combined for keyword in ("부산은행", "은행", "기관", "오픈뱅킹", "펌뱅킹")):
+        return "외부 연계 장애"
+    if any(keyword in combined.upper() for keyword in ("DB", "DATABASE", "SQL")):
+        return "DB"
+    if any(keyword in combined.upper() for keyword in ("API", "타임아웃", "TIMEOUT")):
+        return "API"
+    if any(keyword in combined.upper() for keyword in ("WEB", "화면", "프론트")):
+        return "WEB"
+    if any(keyword in combined.upper() for keyword in ("APP", "앱", "모바일")):
+        return "APP"
+    if any(keyword in combined.upper() for keyword in ("INFRA", "서버", "네트워크", "VPN")):
+        return "INFRA"
+    return "ETC"
+
+
+def _extract_severity(text: str, impact: str) -> str:
+    combined = f"{text}\n{impact}".lower()
+    if any(keyword in combined for keyword in ("부산은행", "외부 연계", "기관", "간헐", "특정사용자")):
+        return "Minor"
+    if any(keyword in combined for keyword in ("critical", "p1", "전면", "전체", "중단")):
+        return "Critical"
+    if any(keyword in combined for keyword in ("high", "p2", "다수", "장애 발생")):
+        return "High"
+    if any(keyword in combined for keyword in ("medium", "p3", "간헐", "타임아웃", "지연")):
+        return "Medium"
+    if any(keyword in combined for keyword in ("low", "p4", "영향 없음", "영향없음")):
+        return "Low"
+    return "Minor"
+
+
+def _extract_scope(text: str, title: str, service: str) -> str:
+    combined = f"{title}\n{text}"
+    if any(keyword in combined for keyword in ("부산은행", "외부 연계", "기관", "간헐")):
+        return "특정사용자"
+    bank_match = re.search(r"([가-힣A-Za-z0-9]+은행)", combined)
+    count_match = re.search(r"(\d+\s*건)", combined)
+    parts = [part for part in (service, bank_match.group(1) if bank_match else "") if part]
+    scope = " ".join(parts) if parts else service or "확인 중"
+    if "타임아웃" in combined and "타임아웃" not in scope:
+        scope += " 간헐 타임아웃"
+    if count_match:
+        scope += f" {count_match.group(1)}"
+    return scope.strip()
 
 
 def _extract_impact(text: str) -> str:

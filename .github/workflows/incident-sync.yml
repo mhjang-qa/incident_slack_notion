@@ -31,6 +31,22 @@ on:
         description: "repair 모드 본문"
         required: false
         default: "2026-06-30 13:41:12부터 오픈뱅킹 부산은행에서 간헐적으로 타임아웃이 발생중(15건)에 있습니다. CS 대응시 참고 바랍니다."
+      repair_category:
+        description: "repair 모드 장애 구분"
+        required: false
+        default: "외부 연계 장애"
+      repair_severity:
+        description: "repair 모드 심각도"
+        required: false
+        default: "Minor"
+      repair_scope:
+        description: "repair 모드 영향 범위"
+        required: false
+        default: "특정사용자"
+      repair_slack_link:
+        description: "repair 모드 Slack 링크"
+        required: false
+        default: "https://hanpass.enterprise.slack.com/archives/C09FYCDU5BR"
 
 permissions:
   contents: read
@@ -117,10 +133,18 @@ jobs:
           REPAIR_TITLE: ${{ inputs.repair_title }}
           REPAIR_STARTED_AT: ${{ inputs.repair_started_at }}
           REPAIR_BODY: ${{ inputs.repair_body }}
+          REPAIR_CATEGORY: ${{ inputs.repair_category }}
+          REPAIR_SEVERITY: ${{ inputs.repair_severity }}
+          REPAIR_SCOPE: ${{ inputs.repair_scope }}
+          REPAIR_SLACK_LINK: ${{ inputs.repair_slack_link }}
         run: >
           python -m incident_slack_notion.repair_page
           --page-id "$REPAIR_PAGE_ID"
           --title "$REPAIR_TITLE"
           --started-at "$REPAIR_STARTED_AT"
           --body "$REPAIR_BODY"
+          --category "$REPAIR_CATEGORY"
+          --severity "$REPAIR_SEVERITY"
+          --scope "$REPAIR_SCOPE"
+          --slack-link "$REPAIR_SLACK_LINK"
           --notify

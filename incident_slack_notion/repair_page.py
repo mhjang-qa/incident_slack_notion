@@ -22,6 +22,10 @@ DEFAULT_BODY = (
     "2026-06-30 13:41:12부터 오픈뱅킹 부산은행에서 간헐적으로 "
     "타임아웃이 발생중(15건)에 있습니다.\nCS 대응시 참고 바랍니다."
 )
+DEFAULT_CATEGORY = "외부 연계 장애"
+DEFAULT_SEVERITY = "Minor"
+DEFAULT_SCOPE = "특정사용자"
+DEFAULT_SLACK_LINK = "https://hanpass.enterprise.slack.com/archives/C09FYCDU5BR"
 
 
 def main() -> None:
@@ -30,6 +34,10 @@ def main() -> None:
     parser.add_argument("--title", default=DEFAULT_TITLE)
     parser.add_argument("--started-at", default=DEFAULT_STARTED_AT)
     parser.add_argument("--body", default=DEFAULT_BODY)
+    parser.add_argument("--category", default=DEFAULT_CATEGORY)
+    parser.add_argument("--severity", default=DEFAULT_SEVERITY)
+    parser.add_argument("--scope", default=DEFAULT_SCOPE)
+    parser.add_argument("--slack-link", default=DEFAULT_SLACK_LINK)
     parser.add_argument("--notify", action="store_true", help="Slack 완료 메시지 전송")
     args = parser.parse_args()
 
@@ -45,10 +53,14 @@ def main() -> None:
             title=args.title,
             occurred_at=occurred_at,
             service="오픈뱅킹",
+            category=args.category,
+            severity=args.severity,
+            scope=args.scope,
             status="모니터링 중",
-            impact="영향도 확인 중",
+            impact=args.severity,
             details=args.body,
             reporter="강훈주 (Tony Kang)",
+            slack_link=args.slack_link,
             raw_message=raw_message,
             source_ts="manual-repair",
             thread_ts="manual-repair",

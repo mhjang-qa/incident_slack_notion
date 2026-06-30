@@ -24,6 +24,9 @@ class Incident:
     occurred_at: datetime | None
     recovered_at: datetime | None = None
     service: str = ""
+    category: str = ""
+    severity: str = ""
+    scope: str = ""
     status: str = "모니터링 중"
     impact: str = ""
     details: str = ""
@@ -37,4 +40,3 @@ class Incident:
     source_ts: str = ""
     thread_ts: str = ""
     thread_messages: list[SlackMessage] = field(default_factory=list)
-

@@ -45,4 +45,8 @@ jobs:
           --title "[오픈뱅킹] 부산은행 불안정"
           --started-at "2026-06-30 13:41:12"
           --body "2026-06-30 13:41:12부터 오픈뱅킹 부산은행에서 간헐적으로 타임아웃이 발생중(15건)에 있습니다. CS 대응시 참고 바랍니다."
+          --category "외부 연계 장애"
+          --severity "Minor"
+          --scope "특정사용자"
+          --slack-link "https://hanpass.enterprise.slack.com/archives/C09FYCDU5BR"
           --notify
