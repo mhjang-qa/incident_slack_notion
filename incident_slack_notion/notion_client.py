@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
 
@@ -13,6 +14,12 @@ from notion_client.errors import APIResponseError
 from .models import Incident
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class NotionPageResult:
+    id: str
+    url: str
 
 # Logical field -> preferred Notion property name. Edit this map when the DB uses
 # names not covered by the aliases below.
@@ -98,7 +105,7 @@ class NotionIncidentClient:
             self.resolved_names,
         )
 
-    def create_incident(self, incident: Incident) -> str:
+    def create_incident(self, incident: Incident) -> NotionPageResult:
         now = datetime.now(tz=incident.occurred_at.tzinfo if incident.occurred_at else None)
         properties = self._build_properties(incident, now, include_created=True)
         parent = (
@@ -110,13 +117,93 @@ class NotionIncidentClient:
             self.client.pages.create,
             parent=parent,
             properties=properties,
+            children=self._build_report_children(incident),
         )
-        return str(response["id"])
+        return NotionPageResult(id=str(response["id"]), url=str(response.get("url") or ""))
 
     def update_incident(self, page_id: str, incident: Incident) -> None:
         now = datetime.now(tz=incident.occurred_at.tzinfo if incident.occurred_at else None)
         properties = self._build_properties(incident, now, include_created=False)
         self._call(self.client.pages.update, page_id=page_id, properties=properties)
+        self._append_thread_update(page_id, incident)
+
+    def ensure_report_body(self, page_id: str, incident: Incident) -> bool:
+        """Backfill generated body blocks when an existing page is title-only."""
+        response = self._call(
+            self.client.blocks.children.list,
+            block_id=page_id,
+            page_size=1,
+        )
+        if response.get("results"):
+            return False
+        self._call(
+            self.client.blocks.children.append,
+            block_id=page_id,
+            children=self._build_report_children(incident),
+        )
+        LOGGER.info("비어 있는 Notion 장애 보고서 본문 보정: %s", page_id)
+        return True
+
+    @staticmethod
+    def page_url(page_id: str) -> str:
+        compact_id = page_id.replace("-", "")
+        return f"https://www.notion.so/{compact_id}" if compact_id else ""
+
+    def _build_report_children(self, incident: Incident) -> list[dict[str, Any]]:
+        """Create the page body equivalent to the Notion '장애 보고서' template."""
+        rows = [
+            ("상태", incident.status or "모니터링 중"),
+            ("발생 일시", _format_datetime(incident.occurred_at)),
+            ("정상화 일시", _format_datetime(incident.recovered_at) or "진행 중"),
+            ("장애 지속 시간", incident.duration_text or "진행 중"),
+            ("영향 서비스", incident.service or "확인 중"),
+            ("영향도", incident.impact or "확인 중"),
+            ("최초 공지자", incident.reporter or "확인 중"),
+        ]
+        children: list[dict[str, Any]] = [
+            _heading_2("장애 보고서"),
+            _callout(
+                "🚨",
+                f"{incident.title}\n"
+                f"상태: {incident.status or '모니터링 중'}\n"
+                f"발생: {_format_datetime(incident.occurred_at) or '확인 중'}",
+            ),
+            _heading_3("1. 장애 개요"),
+            *[_bulleted_item(f"{label}: {value}") for label, value in rows],
+            _heading_3("2. 상세 내용"),
+            _paragraph(incident.details or "장애 상세 내용은 확인 중입니다."),
+            _heading_3("3. 조치 및 복구"),
+            _paragraph(incident.recovery_details or "현재 모니터링 및 원인 확인 중입니다."),
+            _heading_3("4. Slack 원문"),
+            _paragraph(incident.raw_message or "원문 메시지가 없습니다."),
+        ]
+        if incident.thread_summary:
+            children.extend(
+                [
+                    _heading_3("5. 진행 이력"),
+                    _paragraph(incident.thread_summary),
+                ]
+            )
+        if incident.slack_link:
+            children.append(_bookmark_or_link("Slack 원문 바로가기", incident.slack_link))
+        return children[:100]
+
+    def _append_thread_update(self, page_id: str, incident: Incident) -> None:
+        """Append recovery/thread changes below the initial generated report."""
+        if not incident.thread_summary and not incident.recovery_details:
+            return
+        children = [
+            {"object": "block", "type": "divider", "divider": {}},
+            _heading_3(f"업데이트 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"),
+            _paragraph(incident.recovery_details or incident.thread_summary),
+        ]
+        if incident.thread_summary:
+            children.append(_paragraph(incident.thread_summary))
+        self._call(
+            self.client.blocks.children.append,
+            block_id=page_id,
+            children=children[:100],
+        )
 
     def _resolve_property_names(self) -> dict[str, str]:
         result: dict[str, str] = {}
@@ -220,6 +307,67 @@ def _rich_text(value: str) -> list[dict[str, Any]]:
         {"type": "text", "text": {"content": value[index : index + 2000]}}
         for index in range(0, len(value), 2000)
     ][:100]
+
+
+def _heading_2(value: str) -> dict[str, Any]:
+    return {
+        "object": "block",
+        "type": "heading_2",
+        "heading_2": {"rich_text": _rich_text(value)},
+    }
+
+
+def _heading_3(value: str) -> dict[str, Any]:
+    return {
+        "object": "block",
+        "type": "heading_3",
+        "heading_3": {"rich_text": _rich_text(value)},
+    }
+
+
+def _paragraph(value: str) -> dict[str, Any]:
+    return {
+        "object": "block",
+        "type": "paragraph",
+        "paragraph": {"rich_text": _rich_text(value)},
+    }
+
+
+def _bulleted_item(value: str) -> dict[str, Any]:
+    return {
+        "object": "block",
+        "type": "bulleted_list_item",
+        "bulleted_list_item": {"rich_text": _rich_text(value)},
+    }
+
+
+def _callout(icon: str, value: str) -> dict[str, Any]:
+    return {
+        "object": "block",
+        "type": "callout",
+        "callout": {
+            "icon": {"type": "emoji", "emoji": icon},
+            "rich_text": _rich_text(value),
+        },
+    }
+
+
+def _bookmark_or_link(label: str, url: str) -> dict[str, Any]:
+    return {
+        "object": "block",
+        "type": "paragraph",
+        "paragraph": {
+            "rich_text": [
+                {"type": "text", "text": {"content": label, "link": {"url": url}}}
+            ]
+        },
+    }
+
+
+def _format_datetime(value: datetime | None) -> str:
+    if not value:
+        return ""
+    return value.strftime("%Y-%m-%d %H:%M:%S %Z").strip()
 
 
 def _first_number(value: str) -> float | None:

@@ -10,7 +10,7 @@ from typing import Any
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from .models import SlackMessage
+from .models import Incident, SlackMessage
 
 LOGGER = logging.getLogger(__name__)
 
@@ -149,6 +149,54 @@ class SlackIncidentClient:
             }.get(error, "Slack App 권한과 채널 설정을 확인하세요.")
             raise RuntimeError(f"Slack 알림 전송 실패({error}). {guidance}") from exc
         LOGGER.info("장애 없음 알림 전송: %s", target)
+
+    def post_incident_created_notification(
+        self,
+        target: str,
+        incident: Incident,
+        notion_url: str,
+    ) -> None:
+        """Notify after the Notion incident report page has been created."""
+        if not target:
+            return
+        channel_id = self._resolve_channel(target)
+        occurred_at = (
+            incident.occurred_at.strftime("%Y-%m-%d %H:%M:%S %Z")
+            if incident.occurred_at
+            else "확인 중"
+        )
+        notion_line = f"- Notion: {notion_url}" if notion_url else "- Notion: 생성 완료"
+        try:
+            response = self._call(
+                self.client.chat_postMessage,
+                channel=channel_id,
+                text=(
+                    f":rotating_light: 장애 보고서 생성 완료\n"
+                    f"- 제목: {incident.title}\n"
+                    f"- 상태: {incident.status or '모니터링 중'}\n"
+                    f"- 발생 일시: {occurred_at}\n"
+                    f"{notion_line}\n"
+                    f"- Slack 원문: {incident.slack_link or '링크 없음'}"
+                ),
+            )
+            message = response.get("message", {})
+            LOGGER.info(
+                "Slack incident notification posted: channel=%s, ts=%s, username=%s, bot_id=%s",
+                response.get("channel") or channel_id,
+                response.get("ts") or message.get("ts"),
+                message.get("username") or "",
+                message.get("bot_id") or "",
+            )
+        except SlackApiError as exc:
+            error = exc.response.get("error", "unknown_error")
+            guidance = {
+                "missing_scope": "Slack App에 chat:write 권한을 추가하고 앱을 재설치하세요.",
+                "not_in_channel": "Slack App을 알림 채널에 초대하세요.",
+                "channel_not_found": "SLACK_NOTIFICATION_CHANNEL에 정확한 채널 ID를 설정하세요.",
+                "invalid_auth": "SLACK_BOT_TOKEN을 다시 확인하세요.",
+            }.get(error, "Slack App 권한과 채널 설정을 확인하세요.")
+            raise RuntimeError(f"Slack 장애 보고서 알림 전송 실패({error}). {guidance}") from exc
+        LOGGER.info("장애 보고서 생성 알림 전송: %s", target)
 
     def _convert(self, item: dict[str, Any]) -> SlackMessage:
         ts = str(item["ts"])

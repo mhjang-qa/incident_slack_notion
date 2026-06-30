@@ -41,13 +41,21 @@ class IncidentSynchronizer:
 
         # Track all known threads independently, so a late recovery update is
         # still processed even when channel history lookback no longer includes it.
+        refreshed_count = 0
         for mapping in self.storage.tracked_incidents():
             try:
-                self._refresh_thread(mapping.slack_ts, mapping.thread_ts, mapping.notion_page_id)
+                if self._refresh_thread(
+                    mapping.slack_ts, mapping.thread_ts, mapping.notion_page_id
+                ):
+                    refreshed_count += 1
             except Exception:
                 LOGGER.exception("스레드 조회/업데이트 실패: %s", mapping.thread_ts)
 
-        if created_count == 0 and self.settings.slack_notification_channel:
+        if (
+            created_count == 0
+            and refreshed_count == 0
+            and self.settings.slack_notification_channel
+        ):
             self.slack.post_no_incident_notification(
                 self.settings.slack_notification_channel,
                 datetime.now(tz=self.settings.tz),
@@ -73,32 +81,46 @@ class IncidentSynchronizer:
             incident = parse_incident(message)
             thread = self.slack.fetch_thread(message.thread_ts)
             apply_thread(incident, thread)
-            page_id = self.notion.create_incident(incident)
+            page = self.notion.create_incident(incident)
             last_ts = thread[-1].ts if thread else message.ts
-            self.storage.upsert(message.ts, message.thread_ts, page_id, last_ts)
+            self.storage.upsert(message.ts, message.thread_ts, page.id, last_ts)
             created_count += 1
+            if self.settings.slack_notification_channel:
+                self.slack.post_incident_created_notification(
+                    self.settings.slack_notification_channel,
+                    incident,
+                    page.url,
+                )
             LOGGER.info("신규 장애 등록: %s", incident.title)
         return created_count
 
-    def _refresh_thread(self, slack_ts: str, thread_ts: str, page_id: str) -> None:
+    def _refresh_thread(self, slack_ts: str, thread_ts: str, page_id: str) -> bool:
         thread = self.slack.fetch_thread(thread_ts)
         if not thread:
-            return
+            return False
         mapping = self.storage.get(slack_ts, thread_ts)
         last_ts = thread[-1].ts
-        if mapping and mapping.last_thread_ts == last_ts:
-            return
 
         root = thread[0]
         incident = parse_incident(root)
         previous_status = incident.status
         apply_thread(incident, thread)
+        body_backfilled = self.notion.ensure_report_body(page_id, incident)
+        if body_backfilled and self.settings.slack_notification_channel:
+            self.slack.post_incident_created_notification(
+                self.settings.slack_notification_channel,
+                incident,
+                self.notion.page_url(page_id),
+            )
+        if mapping and mapping.last_thread_ts == last_ts:
+            return body_backfilled
         self.notion.update_incident(page_id, incident)
         self.storage.upsert(slack_ts, thread_ts, page_id, last_ts)
         if previous_status != incident.status and incident.status == "정상화":
             LOGGER.info("정상화 감지: %s", incident.title)
         else:
             LOGGER.info("기존 장애 업데이트: %s", incident.title)
+        return True
 
 
 def run_scheduler(settings: Settings, synchronizer: IncidentSynchronizer) -> None:
