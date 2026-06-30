@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -14,6 +15,7 @@ from notion_client.errors import APIResponseError
 from .models import Incident
 
 LOGGER = logging.getLogger(__name__)
+NOTION_PAGE_ID_RE = re.compile(r"(?<![0-9a-fA-F])([0-9a-fA-F]{32})(?![0-9a-fA-F])")
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +145,14 @@ class NotionIncidentClient:
         )
         LOGGER.info("비어 있는 Notion 장애 보고서 본문 보정: %s", page_id)
         return True
+
+    def append_report_body(self, page_id: str, incident: Incident) -> None:
+        """Append a generated incident report body regardless of existing blocks."""
+        self._call(
+            self.client.blocks.children.append,
+            block_id=page_id,
+            children=self._build_report_children(incident),
+        )
 
     @staticmethod
     def page_url(page_id: str) -> str:
@@ -379,3 +389,15 @@ def _first_number(value: str) -> float | None:
 
 def _join_nonempty(*parts: str) -> str:
     return "\n\n".join(part for part in parts if part)
+
+
+def normalize_page_id(value: str) -> str:
+    cleaned = value.strip().replace("-", "")
+    match = NOTION_PAGE_ID_RE.search(cleaned)
+    if not match:
+        raise RuntimeError("Notion page ID 또는 page URL에서 32자리 ID를 찾을 수 없습니다.")
+    compact = match.group(1).lower()
+    return (
+        f"{compact[:8]}-{compact[8:12]}-{compact[12:16]}-"
+        f"{compact[16:20]}-{compact[20:]}"
+    )

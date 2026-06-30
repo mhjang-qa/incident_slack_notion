@@ -6,6 +6,31 @@ on:
     - cron: "17 */6 * * *"
       timezone: "Asia/Seoul"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "sync: 일반 동기화, repair: 특정 Notion 페이지 본문 보정"
+        required: true
+        default: "sync"
+        type: choice
+        options:
+          - sync
+          - repair
+      repair_page_id:
+        description: "repair 모드에서 보정할 Notion page ID 또는 URL"
+        required: false
+        default: "38f73fbd195181c89ba0dcd03fba66a1"
+      repair_title:
+        description: "repair 모드 장애 제목"
+        required: false
+        default: "[오픈뱅킹] 부산은행 불안정"
+      repair_started_at:
+        description: "repair 모드 장애 시작 시각(KST, YYYY-MM-DD HH:MM:SS)"
+        required: false
+        default: "2026-06-30 13:41:12"
+      repair_body:
+        description: "repair 모드 본문"
+        required: false
+        default: "2026-06-30 13:41:12부터 오픈뱅킹 부산은행에서 간헐적으로 타임아웃이 발생중(15건)에 있습니다. CS 대응시 참고 바랍니다."
 
 permissions:
   contents: read
@@ -62,6 +87,7 @@ jobs:
           fi
 
       - name: Synchronize Slack incidents to Notion
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'sync' }}
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID: ${{ vars.SLACK_CHANNEL_ID }}
@@ -75,3 +101,26 @@ jobs:
           DATABASE_PATH: incident_mapping.db
           LOG_LEVEL: INFO
         run: python -m incident_slack_notion.app --once
+
+      - name: Repair specific Notion incident page
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'repair' }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ vars.SLACK_CHANNEL_ID }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ vars.NOTION_DATABASE_ID }}
+          SLACK_NOTIFICATION_CHANNEL: ${{ vars.SLACK_NOTIFICATION_CHANNEL || 'slice_gh-test' }}
+          SLACK_EXPECTED_BOT_NAME: Hanpass QA Bot
+          TIMEZONE: Asia/Seoul
+          LOG_LEVEL: INFO
+          REPAIR_PAGE_ID: ${{ inputs.repair_page_id }}
+          REPAIR_TITLE: ${{ inputs.repair_title }}
+          REPAIR_STARTED_AT: ${{ inputs.repair_started_at }}
+          REPAIR_BODY: ${{ inputs.repair_body }}
+        run: >
+          python -m incident_slack_notion.repair_page
+          --page-id "$REPAIR_PAGE_ID"
+          --title "$REPAIR_TITLE"
+          --started-at "$REPAIR_STARTED_AT"
+          --body "$REPAIR_BODY"
+          --notify
