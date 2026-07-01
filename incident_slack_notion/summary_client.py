@@ -23,7 +23,8 @@ class GeminiIncidentSummarizer:
 
     def summarize(self, incident: Incident) -> str:
         if not self.enabled:
-            return ""
+            LOGGER.warning("GEMINI_API_KEY가 없어 규칙 기반 장애 요약을 사용합니다.")
+            return fallback_summary(incident)
         prompt = _build_prompt(incident)
         endpoint = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -44,10 +45,13 @@ class GeminiIncidentSummarizer:
             )
             response.raise_for_status()
             text = _extract_text(response.json())
-            return _normalize_summary(text)
+            summary = _normalize_summary(text)
+            if summary:
+                return summary
+            LOGGER.warning("Gemini 응답에 요약 텍스트가 없어 규칙 기반 장애 요약을 사용합니다.")
         except Exception:
             LOGGER.exception("Gemini 장애 요약 생성 실패")
-            return ""
+        return fallback_summary(incident)
 
 
 def _build_prompt(incident: Incident) -> str:
@@ -108,3 +112,44 @@ def _normalize_summary(text: str) -> str:
         if len(lines) == 5:
             break
     return "\n".join(lines)
+
+
+def fallback_summary(incident: Incident) -> str:
+    """Create a deterministic 3~5 line incident summary when Gemini is unavailable."""
+    lines: list[str] = []
+    title = incident.title.strip() or "장애"
+    status = incident.status.strip() or ("정상화" if incident.recovered_at else "모니터링 중")
+    started_at = incident.occurred_at.strftime("%Y-%m-%d %H:%M:%S %Z").strip()
+    recovered_at = (
+        incident.recovered_at.strftime("%Y-%m-%d %H:%M:%S %Z").strip()
+        if incident.recovered_at
+        else ""
+    )
+
+    lines.append(f"- {title} 건은 {started_at}부터 감지되었으며 현재 상태는 {status}입니다.")
+    if incident.details:
+        details = " ".join(incident.details.split())
+        lines.append(f"- 상세 내용: {_truncate(details, 120)}")
+    lines.append(
+        "- 영향 정보: "
+        f"심각도 {incident.severity or 'Minor'}, "
+        f"영향 범위 {incident.scope or '확인 중'}, "
+        f"장애 구분 {incident.category or '확인 중'}입니다."
+    )
+    if recovered_at:
+        duration = incident.duration_text or "확인 중"
+        lines.append(f"- {recovered_at} 기준 정상화가 확인되었으며 장애 지속 시간은 {duration}입니다.")
+    elif incident.recovery_details:
+        recovery = " ".join(incident.recovery_details.split())
+        lines.append(f"- 조치 및 복구: {_truncate(recovery, 120)}")
+    else:
+        lines.append("- 현재 모니터링 및 원인 확인 중이며 추가 복구 내용은 확인 후 업데이트가 필요합니다.")
+    if incident.slack_link:
+        lines.append("- Slack 원문 링크를 통해 최초 공지와 진행 이력을 확인할 수 있습니다.")
+    return "\n".join(lines[:5])
+
+
+def _truncate(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    return value[: limit - 1].rstrip() + "…"

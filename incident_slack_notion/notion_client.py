@@ -197,6 +197,9 @@ class NotionIncidentClient:
                 continue
             rich_text = block.get(block_type, {}).get("rich_text", [])
             text = "".join(part.get("plain_text", "") for part in rich_text).strip()
+            if text == "LLM 요약":
+                LOGGER.info("Notion 장애 보고서에 LLM 요약이 이미 있어 추가하지 않음: %s", page_id)
+                return False
             if text in {"장애 보고서", "Incident Report"}:
                 insert_after = str(block["id"])
                 break
