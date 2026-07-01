@@ -12,6 +12,7 @@ from .logger import configure_logging
 from .models import Incident
 from .notion_client import NotionIncidentClient, normalize_page_id
 from .slack_client import SlackIncidentClient
+from .summary_client import GeminiIncidentSummarizer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,6 +41,11 @@ def main() -> None:
     parser.add_argument("--severity", default=DEFAULT_SEVERITY)
     parser.add_argument("--scope", default=DEFAULT_SCOPE)
     parser.add_argument("--slack-link", default=DEFAULT_SLACK_LINK)
+    parser.add_argument("--recovered-at", default="", help="장애 정상화 시각(KST, YYYY-MM-DD HH:MM:SS)")
+    parser.add_argument("--duration-text", default="", help="장애 지속 시간 표시값")
+    parser.add_argument("--recovery-details", default="", help="조치 및 복구 내용")
+    parser.add_argument("--thread-summary", default="", help="진행 이력 요약")
+    parser.add_argument("--summary-only", action="store_true", help="기존 페이지 상단에 LLM 요약만 추가")
     parser.add_argument("--notify", action="store_true", help="Slack 완료 메시지 전송")
     args = parser.parse_args()
 
@@ -50,28 +56,49 @@ def main() -> None:
         occurred_at = datetime.strptime(args.started_at, "%Y-%m-%d %H:%M:%S").replace(
             tzinfo=settings.tz
         )
+        recovered_at = (
+            datetime.strptime(args.recovered_at, "%Y-%m-%d %H:%M:%S").replace(
+                tzinfo=settings.tz
+            )
+            if args.recovered_at
+            else None
+        )
         raw_message = f"{args.title}\n- {args.body}"
         incident = Incident(
             title=args.title,
             occurred_at=occurred_at,
+            recovered_at=recovered_at,
             service=args.service,
             category=args.category,
             severity=args.severity,
             scope=args.scope,
-            status="모니터링 중",
+            status="정상화" if recovered_at else "모니터링 중",
             impact=args.severity,
             details=args.body,
+            recovery_details=args.recovery_details,
+            duration_text=args.duration_text,
             reporter=args.reporter,
             slack_link=args.slack_link,
             raw_message=raw_message,
+            thread_summary=args.thread_summary,
             source_ts="manual-repair",
             thread_ts="manual-repair",
         )
+        summarizer = GeminiIncidentSummarizer(
+            settings.gemini_api_key,
+            settings.gemini_model,
+        )
+        incident.llm_summary = summarizer.summarize(incident)
 
         notion = NotionIncidentClient(settings.notion_token, settings.notion_database_id)
         if page_id:
-            notion.update_incident(page_id, incident)
-            notion.append_report_body(page_id, incident)
+            if args.summary_only:
+                if not incident.llm_summary:
+                    raise RuntimeError("LLM 요약 생성 결과가 비어 있습니다.")
+                notion.insert_summary_near_top(page_id, incident.llm_summary)
+            else:
+                notion.update_incident(page_id, incident)
+                notion.append_report_body(page_id, incident)
             page_url = notion.page_url(page_id)
             LOGGER.info("Notion 장애 보고서 수동 보정 완료: %s", page_url)
         else:

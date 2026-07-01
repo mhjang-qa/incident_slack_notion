@@ -50,6 +50,27 @@ on:
         description: "repair 모드 Slack 링크"
         required: false
         default: "https://hanpass.enterprise.slack.com/archives/C09FYCDU5BR"
+      repair_recovered_at:
+        description: "repair 모드 장애 정상화 시각(KST, YYYY-MM-DD HH:MM:SS)"
+        required: false
+        default: ""
+      repair_duration_text:
+        description: "repair 모드 장애 지속 시간"
+        required: false
+        default: ""
+      repair_recovery_details:
+        description: "repair 모드 조치 및 복구 내용"
+        required: false
+        default: ""
+      repair_thread_summary:
+        description: "repair 모드 진행 이력 요약"
+        required: false
+        default: ""
+      repair_summary_only:
+        description: "기존 페이지 상단에 LLM 요약만 추가"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -145,6 +166,11 @@ jobs:
           REPAIR_SEVERITY: ${{ inputs.repair_severity }}
           REPAIR_SCOPE: ${{ inputs.repair_scope }}
           REPAIR_SLACK_LINK: ${{ inputs.repair_slack_link }}
+          REPAIR_RECOVERED_AT: ${{ inputs.repair_recovered_at }}
+          REPAIR_DURATION_TEXT: ${{ inputs.repair_duration_text }}
+          REPAIR_RECOVERY_DETAILS: ${{ inputs.repair_recovery_details }}
+          REPAIR_THREAD_SUMMARY: ${{ inputs.repair_thread_summary }}
+          REPAIR_SUMMARY_ONLY: ${{ inputs.repair_summary_only }}
         run: >
           python -m incident_slack_notion.repair_page
           --page-id "$REPAIR_PAGE_ID"
@@ -155,4 +181,9 @@ jobs:
           --severity "$REPAIR_SEVERITY"
           --scope "$REPAIR_SCOPE"
           --slack-link "$REPAIR_SLACK_LINK"
-          --notify
+          --recovered-at "$REPAIR_RECOVERED_AT"
+          --duration-text "$REPAIR_DURATION_TEXT"
+          --recovery-details "$REPAIR_RECOVERY_DETAILS"
+          --thread-summary "$REPAIR_THREAD_SUMMARY"
+          ${{ inputs.repair_summary_only && '--summary-only' || '' }}
+          ${{ !inputs.repair_summary_only && '--notify' || '' }}

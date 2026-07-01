@@ -179,6 +179,35 @@ class NotionIncidentClient:
             children=self._build_report_children(incident),
         )
 
+    def insert_summary_near_top(self, page_id: str, summary: str) -> bool:
+        """Insert LLM summary just below the first incident report heading."""
+        children = _summary_blocks(summary)
+        if not children:
+            return False
+
+        response = self._call(
+            self.client.blocks.children.list,
+            block_id=page_id,
+            page_size=100,
+        )
+        insert_after = ""
+        for block in response.get("results", []):
+            block_type = block.get("type")
+            if block_type not in {"heading_1", "heading_2", "heading_3"}:
+                continue
+            rich_text = block.get(block_type, {}).get("rich_text", [])
+            text = "".join(part.get("plain_text", "") for part in rich_text).strip()
+            if text in {"장애 보고서", "Incident Report"}:
+                insert_after = str(block["id"])
+                break
+
+        kwargs: dict[str, Any] = {"block_id": page_id, "children": children[:100]}
+        if insert_after:
+            kwargs["after"] = insert_after
+        self._call(self.client.blocks.children.append, **kwargs)
+        LOGGER.info("Notion 장애 보고서 상단 요약 추가: %s", page_id)
+        return True
+
     @staticmethod
     def page_url(page_id: str) -> str:
         compact_id = page_id.replace("-", "")
