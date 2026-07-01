@@ -119,7 +119,7 @@ jobs:
           SLACK_LOOKBACK_HOURS: "72"
           POST_NO_INCIDENT_HEARTBEAT: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '17 */6 * * *' }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.0-flash' }}
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL || vars.GEMINI_MODEL || 'gemini-2.0-flash' }}
           DATABASE_PATH: incident_mapping.db
           LOG_LEVEL: INFO
         run: python -m incident_slack_notion.app --once
@@ -134,7 +134,7 @@ jobs:
           SLACK_NOTIFICATION_CHANNEL: ${{ vars.SLACK_NOTIFICATION_CHANNEL || 'slice_gh-test' }}
           SLACK_EXPECTED_BOT_NAME: Hanpass QA Bot
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.0-flash' }}
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL || vars.GEMINI_MODEL || 'gemini-2.0-flash' }}
           TIMEZONE: Asia/Seoul
           LOG_LEVEL: INFO
           REPAIR_PAGE_ID: ${{ inputs.repair_page_id }}
