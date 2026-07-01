@@ -6,7 +6,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Callable
 
 from notion_client import Client
@@ -34,6 +34,7 @@ PROPERTY_MAP = {
     "service": "영향 서비스",
     "category": "장애 구분",
     "severity": "심각도 (Severity)",
+    "grade": "결함 등급",
     "scope": "영향 범위",
     "impact": "영향도",
     "details": "상세 내용",
@@ -54,6 +55,7 @@ PROPERTY_ALIASES = {
     "service": ("대상 서비스", "서비스", "영향서비스"),
     "category": ("장애구분", "장애 유형", "장애 타입", "구분", "Category"),
     "severity": ("심각도", "Severity", "등급", "Grade"),
+    "grade": ("등급", "장애 등급", "Priority", "Grade"),
     "scope": ("영향범위", "영향 서비스", "영향서비스", "대상 서비스", "서비스"),
     "impact": ("영향", "Impact"),
     "details": ("장애 내용", "내용", "Details"),
@@ -129,6 +131,23 @@ class NotionIncidentClient:
         )
         return NotionPageResult(id=str(response["id"]), url=str(response.get("url") or ""))
 
+    def find_existing_incident(self, incident: Incident) -> NotionPageResult | None:
+        """Find an existing Notion page before creating a duplicate."""
+        for query_filter in self._duplicate_query_filters(incident):
+            try:
+                response = self._query_pages(filter=query_filter, page_size=1)
+            except APIResponseError:
+                LOGGER.warning("Notion 중복 조회 실패, 다음 조건으로 진행: %s", query_filter)
+                continue
+            results = response.get("results", [])
+            if results:
+                page = results[0]
+                return NotionPageResult(
+                    id=str(page["id"]),
+                    url=str(page.get("url") or self.page_url(str(page["id"]))),
+                )
+        return None
+
     def update_incident(self, page_id: str, incident: Incident) -> None:
         now = datetime.now(tz=incident.occurred_at.tzinfo if incident.occurred_at else None)
         properties = self._build_properties(incident, now, include_created=False)
@@ -172,7 +191,7 @@ class NotionIncidentClient:
             ("발생 일시", _format_datetime(incident.occurred_at)),
             ("정상화 일시", _format_datetime(incident.recovered_at) or "진행 중"),
             ("장애 지속 시간", incident.duration_text or "진행 중"),
-            ("심각도", incident.severity or incident.impact or "확인 중"),
+            ("심각도", incident.severity or incident.impact or "Minor"),
             ("영향 범위", incident.scope or incident.service or "확인 중"),
             ("장애 구분", incident.category or "확인 중"),
             ("최초 공지자", incident.reporter or "확인 중"),
@@ -209,18 +228,47 @@ class NotionIncidentClient:
         """Append recovery/thread changes below the initial generated report."""
         if not incident.thread_summary and not incident.recovery_details:
             return
-        children = [
-            {"object": "block", "type": "divider", "divider": {}},
-            _heading_3(f"업데이트 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"),
-            _paragraph(incident.recovery_details or incident.thread_summary),
-        ]
-        if incident.thread_summary:
-            children.append(_paragraph(incident.thread_summary))
+        children = (
+            [
+                {"object": "block", "type": "divider", "divider": {}},
+            ]
+            + self._build_update_children(incident)
+        )
         self._call(
             self.client.blocks.children.append,
             block_id=page_id,
             children=children[:100],
         )
+
+    def _build_update_children(self, incident: Incident) -> list[dict[str, Any]]:
+        rows = [
+            ("상태", incident.status or "정상화"),
+            ("발생 일시", _format_datetime(incident.occurred_at)),
+            ("정상화 일시", _format_datetime(incident.recovered_at) or "확인 중"),
+            ("장애 지속 시간", incident.duration_text or "확인 중"),
+            ("심각도", incident.severity or "Minor"),
+            ("영향 범위", incident.scope or "특정사용자"),
+            ("장애 구분", incident.category or "외부 연계 장애"),
+            ("최초 공지자", incident.reporter or "확인 중"),
+        ]
+        children: list[dict[str, Any]] = [
+            _heading_3("1. 장애 개요"),
+            *[_bulleted_item(f"{label}: {value}") for label, value in rows],
+            _heading_3("2. 상세 내용"),
+            _paragraph(incident.details or "장애 상세 내용은 확인 중입니다."),
+            _heading_3("3. 조치 및 복구"),
+            _paragraph(incident.recovery_details or "정상화 여부를 확인 중입니다."),
+            _heading_3("4. Slack 원문"),
+            _paragraph(incident.raw_message or "원문 메시지가 없습니다."),
+        ]
+        if incident.thread_summary:
+            children.extend(
+                [
+                    _heading_3("5. 진행 이력"),
+                    _paragraph(incident.thread_summary),
+                ]
+            )
+        return children
 
     def _resolve_property_names(self) -> dict[str, str]:
         result: dict[str, str] = {}
@@ -254,6 +302,7 @@ class NotionIncidentClient:
             "service": incident.service,
             "category": incident.category,
             "severity": incident.severity,
+            "grade": incident.severity,
             "scope": incident.scope,
             "impact": incident.impact,
             "details": _join_nonempty(incident.details, incident.recovery_details),
@@ -264,6 +313,7 @@ class NotionIncidentClient:
             "updated_at": now,
         }
         values["severity"] = values.get("severity") or "Minor"
+        values["grade"] = values.get("grade") or values["severity"]
         if include_created:
             values["created_at"] = now
 
@@ -281,6 +331,50 @@ class NotionIncidentClient:
             if encoded is not None:
                 properties[actual_name] = encoded
         return properties
+
+    def _duplicate_query_filters(self, incident: Incident) -> list[dict[str, Any]]:
+        filters: list[dict[str, Any]] = []
+        slack_property = self.resolved_names.get("slack_link")
+        if slack_property and incident.slack_link:
+            slack_urls = [incident.slack_link]
+            if "?" in incident.slack_link:
+                slack_urls.append(incident.slack_link.split("?", 1)[0])
+            for url in dict.fromkeys(slack_urls):
+                filters.append({"property": slack_property, "url": {"equals": url}})
+
+        title_property = self.resolved_names.get("title")
+        occurred_property = self.resolved_names.get("occurred_at")
+        if title_property and occurred_property and incident.title and incident.occurred_at:
+            start_date = incident.occurred_at.date()
+            next_date = start_date + timedelta(days=1)
+            filters.append(
+                {
+                    "and": [
+                        {"property": title_property, "title": {"equals": incident.title}},
+                        {
+                            "property": occurred_property,
+                            "date": {
+                                "on_or_after": start_date.isoformat(),
+                                "before": next_date.isoformat(),
+                            },
+                        },
+                    ]
+                }
+            )
+        return filters
+
+    def _query_pages(self, **kwargs: Any) -> Any:
+        if self.data_source_id:
+            return self._call(
+                self.client.data_sources.query,
+                data_source_id=self.data_source_id,
+                **kwargs,
+            )
+        return self._call(
+            self.client.databases.query,
+            database_id=self.database_id,
+            **kwargs,
+        )
 
     @staticmethod
     def _encode(property_type: str, value: Any) -> dict[str, Any] | None:

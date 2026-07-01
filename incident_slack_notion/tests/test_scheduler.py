@@ -90,6 +90,7 @@ class SchedulerTest(unittest.TestCase):
             slack.fetch_thread.return_value = [root]
             notion = Mock()
             notion.ensure_report_body.return_value = False
+            notion.find_existing_incident.return_value = None
             notion.create_incident.return_value = SimpleNamespace(
                 id="page-id",
                 url="https://notion.so/page-id",
@@ -104,6 +105,52 @@ class SchedulerTest(unittest.TestCase):
             notion.create_incident.assert_called_once()
             slack.post_incident_created_notification.assert_called_once()
             slack.post_no_incident_notification.assert_not_called()
+
+    def test_updates_existing_notion_page_instead_of_creating_duplicate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+
+            from incident_slack_notion.models import SlackMessage
+
+            root = SlackMessage(
+                ts="1000.1",
+                thread_ts="1000.1",
+                user_id="U1",
+                author="작성자",
+                text="<!channel>\n*[오픈뱅킹 NH농협은행 타임아웃]*\n- 10:15:59 부터 타임아웃 발생",
+                permalink="https://slack.example/archives/C123/p10001",
+                posted_at=datetime(2026, 7, 1, 10, 22, tzinfo=ZoneInfo("Asia/Seoul")),
+            )
+            recovery = SlackMessage(
+                ts="1000.2",
+                thread_ts="1000.1",
+                user_id="U1",
+                author="작성자",
+                text="현재 정상 처리중입니다.\n장애시간 : 10:15:59 ~ 10:16:43",
+                permalink="https://slack.example/archives/C123/p10002",
+                posted_at=datetime(2026, 7, 1, 10, 26, tzinfo=ZoneInfo("Asia/Seoul")),
+                is_thread_reply=True,
+            )
+            slack = Mock()
+            slack.fetch_channel_messages.return_value = [root]
+            slack.fetch_thread.return_value = [root, recovery]
+            notion = Mock()
+            notion.find_existing_incident.return_value = SimpleNamespace(
+                id="existing-page-id",
+                url="https://notion.so/existing-page-id",
+            )
+            notion.ensure_report_body.return_value = False
+            settings = self.settings(str(Path(directory) / "mapping.db"))
+            synchronizer = IncidentSynchronizer(
+                settings, slack, notion, Storage(settings.database_path)
+            )
+
+            synchronizer.run_once()
+
+            notion.update_incident.assert_called_once()
+            notion.create_incident.assert_not_called()
+            slack.post_incident_created_notification.assert_not_called()
 
     def test_posts_incident_notification_after_empty_page_backfill(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

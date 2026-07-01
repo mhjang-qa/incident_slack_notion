@@ -82,8 +82,16 @@ class IncidentSynchronizer:
             incident = parse_incident(message)
             thread = self.slack.fetch_thread(message.thread_ts)
             apply_thread(incident, thread)
-            page = self.notion.create_incident(incident)
             last_ts = thread[-1].ts if thread else message.ts
+
+            existing_page = self.notion.find_existing_incident(incident)
+            if existing_page:
+                self.notion.update_incident(existing_page.id, incident)
+                self.storage.upsert(message.ts, message.thread_ts, existing_page.id, last_ts)
+                LOGGER.info("기존 Notion 장애 보고서 업데이트: %s", incident.title)
+                continue
+
+            page = self.notion.create_incident(incident)
             self.storage.upsert(message.ts, message.thread_ts, page.id, last_ts)
             created_count += 1
             if self.settings.slack_notification_channel:

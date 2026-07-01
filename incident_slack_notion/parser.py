@@ -20,7 +20,7 @@ RECOVERY_KEYWORDS = (
     "모니터링 종료",
 )
 
-TITLE_RE = re.compile(r"^\s*\[([^\]]+)]", re.MULTILINE)
+TITLE_RE = re.compile(r"\*?\[([^\]]+)]\*?", re.MULTILINE)
 TIME_RE = re.compile(r"(?<!\d)([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?(?!\d)")
 RANGE_RE = re.compile(
     r"(?P<start>[0-2]?\d:[0-5]\d(?::[0-5]\d)?)\s*[~～\-]\s*"
@@ -37,7 +37,9 @@ def is_incident_candidate(text: str) -> bool:
 
 
 def is_recovery_message(text: str) -> bool:
-    return any(keyword in text for keyword in RECOVERY_KEYWORDS)
+    return any(keyword in text for keyword in RECOVERY_KEYWORDS) or bool(
+        "장애시간" in text and RANGE_RE.search(text)
+    )
 
 
 def parse_incident(message: SlackMessage) -> Incident:
