@@ -31,6 +31,10 @@ class FakeEndpoint:
         self.last_kwargs = kwargs
         return {"id": kwargs["block_id"]}
 
+    def delete(self, **kwargs):
+        self.last_kwargs = kwargs
+        return {"id": kwargs["block_id"]}
+
     def list(self, **kwargs):
         self.last_kwargs = kwargs
         return {"results": self.response.get("results", [])}
@@ -108,8 +112,9 @@ class NotionClientTest(unittest.TestCase):
         children = client.client.pages.last_kwargs["children"]
 
         self.assertEqual(children[0]["heading_2"]["rich_text"][0]["text"]["content"], "장애 보고서")
-        self.assertEqual(children[1]["heading_3"]["rich_text"][0]["text"]["content"], "LLM 요약")
-        self.assertIn("외부 은행", children[2]["bulleted_list_item"]["rich_text"][0]["text"]["content"])
+        self.assertEqual(children[1]["type"], "callout")
+        self.assertIn("LLM 요약", children[1]["callout"]["rich_text"][0]["text"]["content"])
+        self.assertIn("외부 은행", children[1]["callout"]["rich_text"][0]["text"]["content"])
 
 
 if __name__ == "__main__":

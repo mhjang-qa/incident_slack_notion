@@ -60,11 +60,12 @@ def _build_prompt(incident: Incident) -> str:
 아래 Slack 장애 원문과 스레드 진행 이력을 근거로 Notion 장애 보고서 최상단에 넣을 요약을 작성해라.
 
 조건:
-- 한국어 3~5줄
-- 각 줄은 짧고 명확하게 작성
+- 한국어 2~3줄
+- 각 줄은 35자 이내로 짧고 명확하게 작성
 - Markdown 제목 없이 bullet만 사용
 - 원문에 없는 원인/조치 내용을 추정하지 말 것
-- 포함할 내용: 대상/증상, 한패스 영향 여부, 상태/정상화 시간, 장애 시간, 대응 참고사항
+- 포함할 내용: 대상/증상, 한패스 영향 여부, 상태/장애 시간
+- Slack 링크 안내 같은 메타 설명은 쓰지 말 것
 
 [기본 정보]
 제목: {incident.title}
@@ -109,44 +110,34 @@ def _normalize_summary(text: str) -> str:
         line = line.lstrip("-•* ").strip()
         if line:
             lines.append(f"- {line}")
-        if len(lines) == 5:
+        if len(lines) == 3:
             break
     return "\n".join(lines)
 
 
 def fallback_summary(incident: Incident) -> str:
-    """Create a deterministic 3~5 line incident summary when Gemini is unavailable."""
+    """Create a deterministic short incident summary when Gemini is unavailable."""
     lines: list[str] = []
-    title = incident.title.strip() or "장애"
+    title = _clean_title(incident.title.strip() or "장애")
     status = incident.status.strip() or ("정상화" if incident.recovered_at else "모니터링 중")
-    started_at = incident.occurred_at.strftime("%Y-%m-%d %H:%M:%S %Z").strip()
-    recovered_at = (
-        incident.recovered_at.strftime("%Y-%m-%d %H:%M:%S %Z").strip()
-        if incident.recovered_at
-        else ""
-    )
+    started_at = incident.occurred_at.strftime("%H:%M:%S")
+    recovered_at = incident.recovered_at.strftime("%H:%M:%S") if incident.recovered_at else ""
 
-    lines.append(f"- {title} 건은 {started_at}부터 감지되었으며 현재 상태는 {status}입니다.")
-    if incident.details:
-        details = " ".join(incident.details.split())
-        lines.append(f"- 상세 내용: {_truncate(details, 120)}")
-    lines.append(
-        "- 영향 정보: "
-        f"심각도 {incident.severity or 'Minor'}, "
-        f"영향 범위 {incident.scope or '확인 중'}, "
-        f"장애 구분 {incident.category or '확인 중'}입니다."
-    )
+    lines.append(f"- {title} {started_at} 발생, 상태 {status}")
+    lines.append(f"- 영향: {incident.scope or '확인 중'} / {incident.severity or 'Minor'} / {incident.category or '확인 중'}")
     if recovered_at:
         duration = incident.duration_text or "확인 중"
-        lines.append(f"- {recovered_at} 기준 정상화가 확인되었으며 장애 지속 시간은 {duration}입니다.")
+        lines.append(f"- {recovered_at} 정상화, 장애시간 {duration}")
     elif incident.recovery_details:
-        recovery = " ".join(incident.recovery_details.split())
-        lines.append(f"- 조치 및 복구: {_truncate(recovery, 120)}")
+        lines.append(f"- 복구: {_truncate(' '.join(incident.recovery_details.split()), 40)}")
     else:
-        lines.append("- 현재 모니터링 및 원인 확인 중이며 추가 복구 내용은 확인 후 업데이트가 필요합니다.")
-    if incident.slack_link:
-        lines.append("- Slack 원문 링크를 통해 최초 공지와 진행 이력을 확인할 수 있습니다.")
-    return "\n".join(lines[:5])
+        lines.append("- 한패스 직접 영향 없음, 모니터링 필요")
+    return "\n".join(lines[:3])
+
+
+def _clean_title(value: str) -> str:
+    value = value.replace("[", "").replace("]", "")
+    return _truncate(" ".join(value.split()), 32)
 
 
 def _truncate(value: str, limit: int) -> str:

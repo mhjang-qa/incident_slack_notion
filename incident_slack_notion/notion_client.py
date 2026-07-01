@@ -191,18 +191,33 @@ class NotionIncidentClient:
             page_size=100,
         )
         insert_after = ""
+        old_summary_ids: list[str] = []
+        collecting_old_summary = False
         for block in response.get("results", []):
             block_type = block.get("type")
+            if block_type == "callout":
+                text = _plain_text(block.get("callout", {}).get("rich_text", [])).strip()
+                if text.startswith("LLM 요약"):
+                    old_summary_ids.append(str(block["id"]))
+                continue
+            if block_type == "bulleted_list_item" and collecting_old_summary:
+                old_summary_ids.append(str(block["id"]))
+                continue
             if block_type not in {"heading_1", "heading_2", "heading_3"}:
+                collecting_old_summary = False
                 continue
             rich_text = block.get(block_type, {}).get("rich_text", [])
-            text = "".join(part.get("plain_text", "") for part in rich_text).strip()
+            text = _plain_text(rich_text).strip()
             if text == "LLM 요약":
-                LOGGER.info("Notion 장애 보고서에 LLM 요약이 이미 있어 추가하지 않음: %s", page_id)
-                return False
+                old_summary_ids.append(str(block["id"]))
+                collecting_old_summary = True
+                continue
+            collecting_old_summary = False
             if text in {"장애 보고서", "Incident Report"}:
                 insert_after = str(block["id"])
-                break
+
+        for block_id in old_summary_ids:
+            self._call(self.client.blocks.delete, block_id=block_id)
 
         kwargs: dict[str, Any] = {"block_id": page_id, "children": children[:100]}
         if insert_after:
@@ -497,10 +512,14 @@ def _summary_blocks(summary: str) -> list[dict[str, Any]]:
     lines = [line for line in lines if line]
     if not lines:
         return []
-    return [
-        _heading_3("LLM 요약"),
-        *[_bulleted_item(line) for line in lines[:5]],
-    ]
+    return [_callout("🤖", "LLM 요약\n" + "\n".join(f"• {line}" for line in lines[:3]))]
+
+
+def _plain_text(rich_text: list[dict[str, Any]]) -> str:
+    return "".join(
+        part.get("plain_text") or part.get("text", {}).get("content", "")
+        for part in rich_text
+    )
 
 
 def _callout(icon: str, value: str) -> dict[str, Any]:
