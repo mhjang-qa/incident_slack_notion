@@ -45,7 +45,6 @@
     $("monthKpi").textContent=fmt(items.filter(i=>i.month===monthNow()).length);
     $("mttrKpi").textContent=fmt(completed.length?Math.round(completed.reduce((a,b)=>a+b.mttr_minutes,0)/completed.length):0);
     $("criticalKpi").textContent=fmt(items.filter(i=>i.impact==="Critical").length);
-    $("openKpi").textContent=fmt(items.filter(i=>!["정상화","완료"].includes(i.status)).length);
   }
 
   function setChart(id, config) {
@@ -66,16 +65,6 @@
     setChart("assigneeChart",{type:"bar",data:{labels:owners.labels.slice(0,10),datasets:[{label:"처리 건수",data:owners.values.slice(0,10),backgroundColor:colors.purple,borderRadius:6}]},options:{...chartDefaults(),indexAxis:"y"}});
     const mttr=aggregateMonthly(items,"mttr_minutes",true);
     setChart("mttrChart",{type:"line",data:{labels:mttr.labels,datasets:[{label:"평균 MTTR(분)",data:mttr.values,borderColor:colors.green,backgroundColor:"#2ed3a31a",fill:true,tension:.35}]},options:chartDefaults()});
-    renderFunnel(items);
-  }
-
-  function renderFunnel(items) {
-    const stages=["발생","분석중","조치중","정상화","완료"], palette=[colors.red,colors.orange,colors.yellow,colors.blue,colors.green];
-    const counts=countBy(items,"status",stages); const max=Math.max(...counts.values,1);
-    $("funnelChart").innerHTML=stages.map((stage,index)=>{
-      const value=(counts.values[index]||0), width=55+45*(value/max);
-      return `<div class="funnel-row" style="width:${width}%;background:${palette[index]}cc"><span>${stage}</span><span>${value}</span></div>`;
-    }).join("");
   }
 
   function renderTable(items) {
