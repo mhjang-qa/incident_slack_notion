@@ -33,6 +33,28 @@ class SchedulerTest(unittest.TestCase):
 
             slack.post_no_incident_notification.assert_called_once()
 
+    def test_skips_heartbeat_when_disabled_for_frequent_collection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            slack = Mock()
+            slack.fetch_channel_messages.return_value = []
+            settings = self.settings(str(Path(directory) / "mapping.db"))
+            settings = Settings(
+                slack_bot_token=settings.slack_bot_token,
+                slack_channel_id=settings.slack_channel_id,
+                notion_token=settings.notion_token,
+                notion_database_id=settings.notion_database_id,
+                database_path=settings.database_path,
+                slack_notification_channel=settings.slack_notification_channel,
+                post_no_incident_heartbeat=False,
+            )
+            synchronizer = IncidentSynchronizer(
+                settings, slack, Mock(), Storage(settings.database_path)
+            )
+
+            synchronizer.run_once()
+
+            slack.post_no_incident_notification.assert_not_called()
+
     def test_collection_failure_is_propagated_and_does_not_post_heartbeat(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             slack = Mock()

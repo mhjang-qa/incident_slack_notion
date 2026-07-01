@@ -25,6 +25,7 @@ class Settings:
     slack_lookback_hours: int = 72
     slack_notification_channel: str = "slice_gh-test"
     slack_expected_bot_name: str = "Hanpass QA Bot"
+    post_no_incident_heartbeat: bool = True
     log_level: str = "INFO"
 
     @property
@@ -65,6 +66,7 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
         slack_expected_bot_name=os.getenv(
             "SLACK_EXPECTED_BOT_NAME", "Hanpass QA Bot"
         ).strip(),
+        post_no_incident_heartbeat=_env_bool("POST_NO_INCIDENT_HEARTBEAT", True),
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
     )
 
@@ -83,3 +85,10 @@ def _normalize_notion_database_id(value: str) -> str:
         f"{compact[:8]}-{compact[8:12]}-{compact[12:16]}-"
         f"{compact[16:20]}-{compact[20:]}"
     )
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}

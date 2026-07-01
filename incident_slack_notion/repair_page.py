@@ -29,11 +29,13 @@ DEFAULT_SLACK_LINK = "https://hanpass.enterprise.slack.com/archives/C09FYCDU5BR"
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="특정 Notion 장애 페이지 본문 보정")
-    parser.add_argument("--page-id", required=True, help="Notion page ID 또는 page URL")
+    parser = argparse.ArgumentParser(description="특정 Notion 장애 페이지 생성/본문 보정")
+    parser.add_argument("--page-id", default="", help="Notion page ID 또는 page URL. 없으면 신규 생성")
     parser.add_argument("--title", default=DEFAULT_TITLE)
     parser.add_argument("--started-at", default=DEFAULT_STARTED_AT)
     parser.add_argument("--body", default=DEFAULT_BODY)
+    parser.add_argument("--service", default="오픈뱅킹")
+    parser.add_argument("--reporter", default="강훈주 (Tony Kang)")
     parser.add_argument("--category", default=DEFAULT_CATEGORY)
     parser.add_argument("--severity", default=DEFAULT_SEVERITY)
     parser.add_argument("--scope", default=DEFAULT_SCOPE)
@@ -44,7 +46,7 @@ def main() -> None:
     try:
         settings = load_settings()
         configure_logging(settings.log_level)
-        page_id = normalize_page_id(args.page_id)
+        page_id = normalize_page_id(args.page_id) if args.page_id else ""
         occurred_at = datetime.strptime(args.started_at, "%Y-%m-%d %H:%M:%S").replace(
             tzinfo=settings.tz
         )
@@ -52,14 +54,14 @@ def main() -> None:
         incident = Incident(
             title=args.title,
             occurred_at=occurred_at,
-            service="오픈뱅킹",
+            service=args.service,
             category=args.category,
             severity=args.severity,
             scope=args.scope,
             status="모니터링 중",
             impact=args.severity,
             details=args.body,
-            reporter="강훈주 (Tony Kang)",
+            reporter=args.reporter,
             slack_link=args.slack_link,
             raw_message=raw_message,
             source_ts="manual-repair",
@@ -67,10 +69,15 @@ def main() -> None:
         )
 
         notion = NotionIncidentClient(settings.notion_token, settings.notion_database_id)
-        notion.update_incident(page_id, incident)
-        notion.append_report_body(page_id, incident)
-        page_url = notion.page_url(page_id)
-        LOGGER.info("Notion 장애 보고서 수동 보정 완료: %s", page_url)
+        if page_id:
+            notion.update_incident(page_id, incident)
+            notion.append_report_body(page_id, incident)
+            page_url = notion.page_url(page_id)
+            LOGGER.info("Notion 장애 보고서 수동 보정 완료: %s", page_url)
+        else:
+            page = notion.create_incident(incident)
+            page_url = page.url or notion.page_url(page.id)
+            LOGGER.info("Notion 장애 보고서 수동 생성 완료: %s", page_url)
 
         if args.notify and settings.slack_notification_channel:
             slack = SlackIncidentClient(

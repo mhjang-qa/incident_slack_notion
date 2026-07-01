@@ -1,0 +1,53 @@
+name: Register current NH Bank incident
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/register-current-nh-incident.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: incident_slack_notion/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r incident_slack_notion/requirements.txt
+
+      - name: Register Notion page and notify Slack
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ vars.SLACK_CHANNEL_ID }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ vars.NOTION_DATABASE_ID }}
+          SLACK_NOTIFICATION_CHANNEL: ${{ vars.SLACK_NOTIFICATION_CHANNEL || 'slice_gh-test' }}
+          SLACK_EXPECTED_BOT_NAME: Hanpass QA Bot
+          TIMEZONE: Asia/Seoul
+          LOG_LEVEL: INFO
+        run: >
+          python -m incident_slack_notion.repair_page
+          --title "[오픈뱅킹] NH농협은행 타임아웃"
+          --started-at "2026-07-01 10:15:59"
+          --body "2026-07-01 10:15:59부터 NH농협은행 오픈뱅킹 서비스에서 타임아웃이 발생중입니다. 해당 은행 오픈뱅킹 서비스 외 한패스 서비스에는 영향 없습니다. CS 대응 참고 바랍니다."
+          --service "오픈뱅킹"
+          --reporter "Slack 자동 수집"
+          --category "외부 연계 장애"
+          --severity "Minor"
+          --scope "특정사용자"
+          --slack-link "https://hanpass-all.slack.com/archives/C09FYCDU5BR/p1782868955430599"
+          --notify

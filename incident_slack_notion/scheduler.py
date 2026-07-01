@@ -55,6 +55,7 @@ class IncidentSynchronizer:
             created_count == 0
             and refreshed_count == 0
             and self.settings.slack_notification_channel
+            and self.settings.post_no_incident_heartbeat
         ):
             self.slack.post_no_incident_notification(
                 self.settings.slack_notification_channel,
