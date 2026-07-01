@@ -37,6 +37,7 @@ class Incident:
     duration_minutes: int | None = None
     duration_text: str = ""
     recovery_details: str = ""
+    llm_summary: str = ""
     source_ts: str = ""
     thread_ts: str = ""
     thread_messages: list[SlackMessage] = field(default_factory=list)

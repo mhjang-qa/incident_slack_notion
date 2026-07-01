@@ -26,6 +26,8 @@ class Settings:
     slack_notification_channel: str = "slice_gh-test"
     slack_expected_bot_name: str = "Hanpass QA Bot"
     post_no_incident_heartbeat: bool = True
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
     log_level: str = "INFO"
 
     @property
@@ -67,6 +69,8 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
             "SLACK_EXPECTED_BOT_NAME", "Hanpass QA Bot"
         ).strip(),
         post_no_incident_heartbeat=_env_bool("POST_NO_INCIDENT_HEARTBEAT", True),
+        gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
+        gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip(),
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
     )
 

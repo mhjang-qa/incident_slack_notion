@@ -96,6 +96,21 @@ class NotionClientTest(unittest.TestCase):
         self.assertEqual(client.client.block_children.last_kwargs["block_id"], "page-id")
         self.assertGreater(len(client.client.block_children.last_kwargs["children"]), 0)
 
+    def test_adds_llm_summary_near_top_of_report(self) -> None:
+        client = NotionIncidentClient("token", "database-id")
+        incident = Incident(
+            title="요약 장애",
+            occurred_at=datetime(2026, 6, 18, 12, 0, tzinfo=ZoneInfo("Asia/Seoul")),
+            llm_summary="- 외부 은행 타임아웃 발생\n- 한패스 직접 영향 없음",
+        )
+
+        client.create_incident(incident)
+        children = client.client.pages.last_kwargs["children"]
+
+        self.assertEqual(children[0]["heading_2"]["rich_text"][0]["text"]["content"], "장애 보고서")
+        self.assertEqual(children[1]["heading_3"]["rich_text"][0]["text"]["content"], "LLM 요약")
+        self.assertIn("외부 은행", children[2]["bulleted_list_item"]["rich_text"][0]["text"]["content"])
+
 
 if __name__ == "__main__":
     unittest.main()

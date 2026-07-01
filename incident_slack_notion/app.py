@@ -12,6 +12,7 @@ from .notion_client import NotionIncidentClient
 from .scheduler import IncidentSynchronizer, run_scheduler
 from .slack_client import SlackIncidentClient
 from .storage import Storage
+from .summary_client import GeminiIncidentSummarizer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -32,7 +33,12 @@ def main() -> None:
         notion = NotionIncidentClient(
             settings.notion_token, settings.notion_database_id
         )
-        synchronizer = IncidentSynchronizer(settings, slack, notion, storage)
+        summarizer = GeminiIncidentSummarizer(
+            settings.gemini_api_key, settings.gemini_model
+        )
+        synchronizer = IncidentSynchronizer(
+            settings, slack, notion, storage, summarizer
+        )
         if args.once:
             synchronizer.run_once()
         else:

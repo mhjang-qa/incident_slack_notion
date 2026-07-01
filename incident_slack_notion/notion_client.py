@@ -198,6 +198,7 @@ class NotionIncidentClient:
         ]
         children: list[dict[str, Any]] = [
             _heading_2("장애 보고서"),
+            *_summary_blocks(incident.llm_summary),
             _callout(
                 "🚨",
                 f"{incident.title}\n"
@@ -252,6 +253,7 @@ class NotionIncidentClient:
             ("최초 공지자", incident.reporter or "확인 중"),
         ]
         children: list[dict[str, Any]] = [
+            *_summary_blocks(incident.llm_summary),
             _heading_3("1. 장애 개요"),
             *[_bulleted_item(f"{label}: {value}") for label, value in rows],
             _heading_3("2. 상세 내용"),
@@ -454,6 +456,19 @@ def _bulleted_item(value: str) -> dict[str, Any]:
         "type": "bulleted_list_item",
         "bulleted_list_item": {"rich_text": _rich_text(value)},
     }
+
+
+def _summary_blocks(summary: str) -> list[dict[str, Any]]:
+    if not summary.strip():
+        return []
+    lines = [line.strip().lstrip("-•* ").strip() for line in summary.splitlines()]
+    lines = [line for line in lines if line]
+    if not lines:
+        return []
+    return [
+        _heading_3("LLM 요약"),
+        *[_bulleted_item(line) for line in lines[:5]],
+    ]
 
 
 def _callout(icon: str, value: str) -> dict[str, Any]:

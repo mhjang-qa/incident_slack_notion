@@ -13,6 +13,7 @@ from .storage import Storage
 if TYPE_CHECKING:
     from .notion_client import NotionIncidentClient
     from .slack_client import SlackIncidentClient
+    from .summary_client import GeminiIncidentSummarizer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -24,11 +25,13 @@ class IncidentSynchronizer:
         slack: SlackIncidentClient,
         notion: NotionIncidentClient,
         storage: Storage,
+        summarizer: GeminiIncidentSummarizer | None = None,
     ) -> None:
         self.settings = settings
         self.slack = slack
         self.notion = notion
         self.storage = storage
+        self.summarizer = summarizer
 
     def run_once(self) -> None:
         """Run one idempotent collection/update cycle."""
@@ -82,6 +85,7 @@ class IncidentSynchronizer:
             incident = parse_incident(message)
             thread = self.slack.fetch_thread(message.thread_ts)
             apply_thread(incident, thread)
+            self._summarize(incident)
             last_ts = thread[-1].ts if thread else message.ts
 
             existing_page = self.notion.find_existing_incident(incident)
@@ -114,6 +118,7 @@ class IncidentSynchronizer:
         incident = parse_incident(root)
         previous_status = incident.status
         apply_thread(incident, thread)
+        self._summarize(incident)
         body_backfilled = self.notion.ensure_report_body(page_id, incident)
         if body_backfilled and self.settings.slack_notification_channel:
             self.slack.post_incident_created_notification(
@@ -130,6 +135,11 @@ class IncidentSynchronizer:
         else:
             LOGGER.info("기존 장애 업데이트: %s", incident.title)
         return True
+
+    def _summarize(self, incident) -> None:
+        if not self.summarizer:
+            return
+        incident.llm_summary = self.summarizer.summarize(incident)
 
 
 def run_scheduler(settings: Settings, synchronizer: IncidentSynchronizer) -> None:
