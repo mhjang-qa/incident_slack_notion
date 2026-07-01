@@ -263,6 +263,7 @@ class NotionIncidentClient:
             "thread_summary": incident.thread_summary,
             "updated_at": now,
         }
+        values["severity"] = values.get("severity") or "Minor"
         if include_created:
             values["created_at"] = now
 

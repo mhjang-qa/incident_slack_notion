@@ -10,7 +10,15 @@ from .models import Incident, SlackMessage
 INCIDENT_KEYWORDS = (
     "장애", "타임아웃", "서비스 오류", "거래 지연", "복구", "정상화", "모니터링", "영향 없음"
 )
-RECOVERY_KEYWORDS = ("정상화", "복구 완료", "조치 완료", "모니터링 종료")
+RECOVERY_KEYWORDS = (
+    "정상화",
+    "복구 완료",
+    "조치 완료",
+    "처리 완료",
+    "정상 처리",
+    "정상처리",
+    "모니터링 종료",
+)
 
 TITLE_RE = re.compile(r"^\s*\[([^\]]+)]", re.MULTILINE)
 TIME_RE = re.compile(r"(?<!\d)([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?(?!\d)")
@@ -154,7 +162,10 @@ def _extract_category(text: str, title: str) -> str:
 
 def _extract_severity(text: str, impact: str) -> str:
     combined = f"{text}\n{impact}".lower()
-    if any(keyword in combined for keyword in ("부산은행", "외부 연계", "기관", "간헐", "특정사용자")):
+    if any(
+        keyword in combined
+        for keyword in ("은행", "외부 연계", "기관", "간헐", "특정사용자", "영향 없음", "영향없음")
+    ):
         return "Minor"
     if any(keyword in combined for keyword in ("critical", "p1", "전면", "전체", "중단")):
         return "Critical"
@@ -169,7 +180,7 @@ def _extract_severity(text: str, impact: str) -> str:
 
 def _extract_scope(text: str, title: str, service: str) -> str:
     combined = f"{title}\n{text}"
-    if any(keyword in combined for keyword in ("부산은행", "외부 연계", "기관", "간헐")):
+    if any(keyword in combined for keyword in ("은행", "외부 연계", "기관", "간헐")):
         return "특정사용자"
     bank_match = re.search(r"([가-힣A-Za-z0-9]+은행)", combined)
     count_match = re.search(r"(\d+\s*건)", combined)

@@ -65,6 +65,36 @@ class ParserTest(unittest.TestCase):
             incident.recovered_at, datetime(2026, 6, 7, 15, 13, 13, tzinfo=KST)
         )
 
+    def test_normal_processing_thread_updates_recovery_and_minor_severity(self) -> None:
+        root = message(
+            "[오픈뱅킹 NH농협은행 타임아웃]\n"
+            "• 10:15:59 부터 타임아웃 발생중입니다..\n"
+            "• 해당 은행 오픈뱅킹 서비스외 한패스 서비스에는 영향 없습니다..\n"
+            "CS 대응 참고 바랍니다.",
+            datetime(2026, 7, 1, 10, 22, 35, tzinfo=KST),
+        )
+        recovery = message(
+            "현재 정상 처리중입니다.\n\n장애시간 : 10:15:59 ~ 10:16:43",
+            datetime(2026, 7, 1, 10, 25, tzinfo=KST),
+            "2.0",
+        )
+
+        incident = apply_thread(parse_incident(root), [root, recovery])
+
+        self.assertEqual(incident.title, "[오픈뱅킹] NH농협은행 타임아웃")
+        self.assertEqual(incident.category, "외부 연계 장애")
+        self.assertEqual(incident.severity, "Minor")
+        self.assertEqual(incident.scope, "특정사용자")
+        self.assertEqual(incident.status, "정상화")
+        self.assertEqual(
+            incident.occurred_at, datetime(2026, 7, 1, 10, 15, 59, tzinfo=KST)
+        )
+        self.assertEqual(
+            incident.recovered_at, datetime(2026, 7, 1, 10, 16, 43, tzinfo=KST)
+        )
+        self.assertEqual(incident.duration_minutes, 1)
+        self.assertEqual(incident.duration_text, "약 1분")
+
     def test_duration_across_midnight(self) -> None:
         root = message(
             "[결제 서비스 오류]\n23:50:00부터 오류 발생",
