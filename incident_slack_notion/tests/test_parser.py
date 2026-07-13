@@ -125,6 +125,15 @@ class ParserTest(unittest.TestCase):
         self.assertEqual(format_duration(50), "약 50분")
         self.assertEqual(format_duration(100), "약 1시간 40분")
 
+    def test_standalone_recovery_notice_is_not_new_incident_candidate(self) -> None:
+        self.assertFalse(
+            is_incident_candidate(
+                "[오픈뱅킹 기업은행 정상화]\n"
+                "장애시간: 13:37:36 ~ 13:42:31\n"
+                "현재 정상 처리되었습니다."
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

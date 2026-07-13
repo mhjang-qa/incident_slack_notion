@@ -128,7 +128,8 @@ class SlackIncidentClient:
                 text=(
                     f":white_check_mark: 장애 모니터링 정상 확인\n"
                     f"- 확인 시각: {checked_at_text}\n"
-                    f"- 최근 {lookback_hours}시간 내 신규 장애: 없음"
+                    f"- Slack 조회 범위: 최근 {lookback_hours}시간\n"
+                    f"- 이번 실행 신규 등록/상태 업데이트: 없음"
                 ),
             )
             message = response.get("message", {})

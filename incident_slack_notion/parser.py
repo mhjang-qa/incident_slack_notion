@@ -10,6 +10,17 @@ from .models import Incident, SlackMessage
 INCIDENT_KEYWORDS = (
     "장애", "타임아웃", "서비스 오류", "거래 지연", "복구", "정상화", "모니터링", "영향 없음"
 )
+ACTIVE_INCIDENT_KEYWORDS = (
+    "발생",
+    "발생중",
+    "오류",
+    "거래 지연",
+    "지연",
+    "타임아웃 발생",
+    "모니터링 중",
+    "중단",
+    "문제",
+)
 RECOVERY_KEYWORDS = (
     "정상화",
     "복구 완료",
@@ -33,7 +44,13 @@ DURATION_RE = re.compile(
 
 def is_incident_candidate(text: str) -> bool:
     normalized = text.strip()
-    return bool(normalized and any(keyword in normalized for keyword in INCIDENT_KEYWORDS))
+    if not normalized:
+        return False
+    if is_recovery_message(normalized) and not any(
+        keyword in normalized for keyword in ACTIVE_INCIDENT_KEYWORDS
+    ):
+        return False
+    return any(keyword in normalized for keyword in INCIDENT_KEYWORDS)
 
 
 def is_recovery_message(text: str) -> bool:
