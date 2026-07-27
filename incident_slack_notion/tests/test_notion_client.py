@@ -123,6 +123,22 @@ class NotionClientTest(unittest.TestCase):
 
         self.assertEqual(client.resolved_names["severity"], "심각도\n  (Severity)")
 
+    def test_uses_date_range_for_recovered_incident_occurred_at(self) -> None:
+        client = NotionIncidentClient("token", "database-id")
+        client.schema["발생 일시"] = {"type": "date", "date": {}}
+        client.resolved_names = client._resolve_property_names()
+        incident = Incident(
+            title="정상화 장애",
+            occurred_at=datetime(2026, 7, 27, 18, 7, 41, tzinfo=ZoneInfo("Asia/Seoul")),
+            recovered_at=datetime(2026, 7, 27, 18, 41, tzinfo=ZoneInfo("Asia/Seoul")),
+        )
+
+        client.update_incident("page-id", incident, append_thread_update=False)
+
+        date_value = client.client.pages.last_kwargs["properties"]["발생 일시"]["date"]
+        self.assertEqual(date_value["start"], "2026-07-27T18:07:41+09:00")
+        self.assertEqual(date_value["end"], "2026-07-27T18:41:00+09:00")
+
 
 if __name__ == "__main__":
     unittest.main()

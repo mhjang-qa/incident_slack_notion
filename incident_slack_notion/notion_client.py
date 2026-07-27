@@ -458,6 +458,15 @@ class NotionIncidentClient:
                 value = incident.duration_minutes
                 if value is None:
                     continue
+            if (
+                logical_name == "occurred_at"
+                and definition["type"] == "date"
+                and isinstance(value, datetime)
+                and incident.recovered_at
+            ):
+                encoded = _date_range(value, incident.recovered_at)
+                properties[actual_name] = encoded
+                continue
             encoded = self._encode(definition["type"], value)
             if encoded is not None:
                 properties[actual_name] = encoded
@@ -613,6 +622,12 @@ def _plain_text(rich_text: list[dict[str, Any]]) -> str:
 
 def _normalize_name(value: str) -> str:
     return re.sub(r"\s+", "", value).lower()
+
+
+def _date_range(start: datetime, end: datetime) -> dict[str, Any]:
+    if end < start:
+        end = end + timedelta(days=1)
+    return {"date": {"start": start.isoformat(), "end": end.isoformat()}}
 
 
 def _incident_tokens(value: str) -> list[str]:
