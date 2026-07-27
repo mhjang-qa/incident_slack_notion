@@ -152,6 +152,50 @@ class SchedulerTest(unittest.TestCase):
             notion.create_incident.assert_not_called()
             slack.post_incident_created_notification.assert_not_called()
 
+    def test_standalone_recovery_updates_existing_page(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+
+            from incident_slack_notion.models import SlackMessage
+
+            recovery = SlackMessage(
+                ts="2000.1",
+                thread_ts="2000.1",
+                user_id="U1",
+                author="작성자",
+                text=(
+                    "[오픈뱅킹 카카오뱅크 정상화]\n"
+                    "- 장애시간 : 18:07:41 ~ 18:41 (약 34분간)\n"
+                    "- 해당 장애시간 중 한패스 서비스에는 특이사항 없었습니다."
+                ),
+                permalink="https://slack.example/archives/C123/p20001",
+                posted_at=datetime(2026, 7, 27, 18, 45, tzinfo=ZoneInfo("Asia/Seoul")),
+            )
+            slack = Mock()
+            slack.fetch_channel_messages.return_value = [recovery]
+            slack.fetch_thread.return_value = [recovery]
+            notion = Mock()
+            notion.find_recoverable_incident.return_value = SimpleNamespace(
+                id="existing-page-id",
+                url="https://notion.so/existing-page-id",
+                title="[오픈뱅킹] 카카오뱅크 타임아웃",
+            )
+            notion.ensure_report_body.return_value = False
+            settings = self.settings(str(Path(directory) / "mapping.db"))
+            synchronizer = IncidentSynchronizer(
+                settings, slack, notion, Storage(settings.database_path)
+            )
+
+            synchronizer.run_once()
+
+            notion.update_incident.assert_called_once()
+            updated_incident = notion.update_incident.call_args.args[1]
+            self.assertEqual(updated_incident.title, "[오픈뱅킹] 카카오뱅크 타임아웃")
+            self.assertEqual(updated_incident.status, "정상화")
+            notion.create_incident.assert_not_called()
+            slack.post_no_incident_notification.assert_not_called()
+
     def test_posts_incident_notification_after_empty_page_backfill(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             from datetime import datetime

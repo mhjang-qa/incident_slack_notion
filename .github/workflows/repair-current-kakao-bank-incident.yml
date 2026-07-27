@@ -1,0 +1,61 @@
+name: Repair current Kakao Bank incident page
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/repair-current-kakao-bank-incident.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: incident_slack_notion/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r incident_slack_notion/requirements.txt
+
+      - name: Replace Kakao Bank incident report body and notify Slack
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ vars.SLACK_CHANNEL_ID }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ vars.NOTION_DATABASE_ID }}
+          SLACK_NOTIFICATION_CHANNEL: ${{ vars.SLACK_NOTIFICATION_CHANNEL || 'slice_gh-test' }}
+          SLACK_EXPECTED_BOT_NAME: Hanpass QA Bot
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL || vars.GEMINI_MODEL || 'gemini-2.0-flash' }}
+          TIMEZONE: Asia/Seoul
+          LOG_LEVEL: INFO
+        run: >
+          python -m incident_slack_notion.repair_page
+          --page-id "3aa73fbd19518132af65fb64fbb0a0ea"
+          --title "[오픈뱅킹] 카카오뱅크 타임아웃"
+          --started-at "2026-07-27 18:07:41"
+          --recovered-at "2026-07-27 18:41:00"
+          --duration-text "약 34분"
+          --body "2026-07-27 18:07:41부터 카카오뱅크 오픈뱅킹 타임아웃이 발생했습니다. 해당 서비스 외 한패스 서비스에는 영향 없습니다. CS 대응 참고 바랍니다."
+          --recovery-details "2026-07-27 18:41:00 기준 카카오뱅크 오픈뱅킹 정상화가 공유되었습니다. 장애시간은 18:07:41 ~ 18:41:00, 약 34분입니다. 해당 장애시간 중 한패스 서비스에는 특이사항 없었습니다."
+          --thread-summary "2026-07-27 18:11:38 Tony (강훈주): 카카오뱅크 오픈뱅킹 타임아웃 발생 및 한패스 서비스 영향 없음 공지.
+          2026-07-27 18:12:14 Tony (강훈주): 쿠콘 Web발신으로 카카오뱅크 펌뱅킹 거래 원활하지 않음 공유.
+          2026-07-27 18:45:00 Tony (강훈주): 카카오뱅크 정상화 및 장애시간 18:07:41 ~ 18:41:00 공유."
+          --category "외부 연계 장애"
+          --severity "Minor"
+          --scope "특정사용자"
+          --slack-link "https://hanpass-all.slack.com/archives/C09FYCDU5BR/p1785143498817589?thread_ts=1785143498.817589&cid=C09FYCDU5BR"
+          --replace-body
+          --notify

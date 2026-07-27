@@ -46,6 +46,7 @@ def main() -> None:
     parser.add_argument("--recovery-details", default="", help="조치 및 복구 내용")
     parser.add_argument("--thread-summary", default="", help="진행 이력 요약")
     parser.add_argument("--summary-only", action="store_true", help="기존 페이지 상단에 LLM 요약만 추가")
+    parser.add_argument("--replace-body", action="store_true", help="기존 페이지 본문을 삭제하고 보고서를 재생성")
     parser.add_argument("--notify", action="store_true", help="Slack 완료 메시지 전송")
     args = parser.parse_args()
 
@@ -97,8 +98,15 @@ def main() -> None:
                     raise RuntimeError("LLM 요약 생성 결과가 비어 있습니다.")
                 notion.insert_summary_near_top(page_id, incident.llm_summary)
             else:
-                notion.update_incident(page_id, incident)
-                notion.append_report_body(page_id, incident)
+                notion.update_incident(
+                    page_id,
+                    incident,
+                    append_thread_update=not args.replace_body,
+                )
+                if args.replace_body:
+                    notion.replace_report_body(page_id, incident)
+                else:
+                    notion.append_report_body(page_id, incident)
             page_url = notion.page_url(page_id)
             LOGGER.info("Notion 장애 보고서 수동 보정 완료: %s", page_url)
         else:

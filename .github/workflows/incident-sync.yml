@@ -71,6 +71,11 @@ on:
         required: false
         default: false
         type: boolean
+      repair_replace_body:
+        description: "기존 페이지 본문을 삭제하고 보고서 재생성"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -171,6 +176,7 @@ jobs:
           REPAIR_RECOVERY_DETAILS: ${{ inputs.repair_recovery_details }}
           REPAIR_THREAD_SUMMARY: ${{ inputs.repair_thread_summary }}
           REPAIR_SUMMARY_ONLY: ${{ inputs.repair_summary_only }}
+          REPAIR_REPLACE_BODY: ${{ inputs.repair_replace_body }}
         run: >
           python -m incident_slack_notion.repair_page
           --page-id "$REPAIR_PAGE_ID"
@@ -186,4 +192,5 @@ jobs:
           --recovery-details "$REPAIR_RECOVERY_DETAILS"
           --thread-summary "$REPAIR_THREAD_SUMMARY"
           ${{ inputs.repair_summary_only && '--summary-only' || '' }}
+          ${{ inputs.repair_replace_body && '--replace-body' || '' }}
           ${{ !inputs.repair_summary_only && '--notify' || '' }}

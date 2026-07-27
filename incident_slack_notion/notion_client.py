@@ -22,6 +22,7 @@ NOTION_PAGE_ID_RE = re.compile(r"(?<![0-9a-fA-F])([0-9a-fA-F]{32})(?![0-9a-fA-F]
 class NotionPageResult:
     id: str
     url: str
+    title: str = ""
 
 # Logical field -> preferred Notion property name. Edit this map when the DB uses
 # names not covered by the aliases below.
@@ -145,14 +146,63 @@ class NotionIncidentClient:
                 return NotionPageResult(
                     id=str(page["id"]),
                     url=str(page.get("url") or self.page_url(str(page["id"]))),
+                    title=self._page_title(page),
                 )
         return None
 
-    def update_incident(self, page_id: str, incident: Incident) -> None:
+    def find_recoverable_incident(self, incident: Incident) -> NotionPageResult | None:
+        """Find an existing incident page for a standalone recovery notice."""
+        occurred_property = self.resolved_names.get("occurred_at")
+        if not occurred_property or not incident.occurred_at:
+            return self.find_existing_incident(incident)
+
+        start_date = incident.occurred_at.date()
+        next_date = start_date + timedelta(days=1)
+        query_filter = {
+            "property": occurred_property,
+            "date": {
+                "on_or_after": start_date.isoformat(),
+                "before": next_date.isoformat(),
+            },
+        }
+        try:
+            response = self._query_pages(filter=query_filter, page_size=25)
+        except APIResponseError:
+            LOGGER.warning("Notion 정상화 대상 조회 실패: %s", query_filter)
+            return self.find_existing_incident(incident)
+
+        tokens = _incident_tokens(incident.title)
+        best: tuple[int, dict[str, Any]] | None = None
+        for page in response.get("results", []):
+            title = self._page_title(page)
+            if "정상화" in title:
+                continue
+            score = sum(1 for token in tokens if token and token in title)
+            if score <= 0:
+                continue
+            if best is None or score > best[0]:
+                best = (score, page)
+        if not best:
+            return None
+        page = best[1]
+        return NotionPageResult(
+            id=str(page["id"]),
+            url=str(page.get("url") or self.page_url(str(page["id"]))),
+            title=self._page_title(page),
+        )
+
+    def update_incident(
+        self,
+        page_id: str,
+        incident: Incident,
+        *,
+        append_thread_update: bool = True,
+    ) -> None:
         now = datetime.now(tz=incident.occurred_at.tzinfo if incident.occurred_at else None)
         properties = self._build_properties(incident, now, include_created=False)
         self._call(self.client.pages.update, page_id=page_id, properties=properties)
-        self._append_thread_update(page_id, incident)
+        if append_thread_update:
+            self._append_thread_update(page_id, incident)
 
     def ensure_report_body(self, page_id: str, incident: Incident) -> bool:
         """Backfill generated body blocks when an existing page is title-only."""
@@ -178,6 +228,28 @@ class NotionIncidentClient:
             block_id=page_id,
             children=self._build_report_children(incident),
         )
+
+    def replace_report_body(self, page_id: str, incident: Incident) -> None:
+        """Replace all page body blocks with a freshly generated report."""
+        cursor: str | None = None
+        while True:
+            response = self._call(
+                self.client.blocks.children.list,
+                block_id=page_id,
+                page_size=100,
+                start_cursor=cursor,
+            )
+            for block in response.get("results", []):
+                self._call(self.client.blocks.delete, block_id=str(block["id"]))
+            cursor = response.get("next_cursor")
+            if not response.get("has_more") or not cursor:
+                break
+        self._call(
+            self.client.blocks.children.append,
+            block_id=page_id,
+            children=self._build_report_children(incident),
+        )
+        LOGGER.info("Notion 장애 보고서 본문 재생성 완료: %s", page_id)
 
     def insert_summary_near_top(self, page_id: str, summary: str) -> bool:
         """Insert LLM summary just below the first incident report heading."""
@@ -321,9 +393,19 @@ class NotionIncidentClient:
 
     def _resolve_property_names(self) -> dict[str, str]:
         result: dict[str, str] = {}
+        normalized_schema = {_normalize_name(name): name for name in self.schema}
         for logical_name, preferred in PROPERTY_MAP.items():
             candidates = (preferred, *PROPERTY_ALIASES.get(logical_name, ()))
             matched = next((candidate for candidate in candidates if candidate in self.schema), None)
+            if not matched:
+                matched = next(
+                    (
+                        normalized_schema[_normalize_name(candidate)]
+                        for candidate in candidates
+                        if _normalize_name(candidate) in normalized_schema
+                    ),
+                    None,
+                )
             if matched:
                 result[logical_name] = matched
 
@@ -411,6 +493,13 @@ class NotionIncidentClient:
                 }
             )
         return filters
+
+    def _page_title(self, page: dict[str, Any]) -> str:
+        title_property = self.resolved_names.get("title")
+        if not title_property:
+            return ""
+        title_value = page.get("properties", {}).get(title_property, {}).get("title", [])
+        return _plain_text(title_value).strip()
 
     def _query_pages(self, **kwargs: Any) -> Any:
         if self.data_source_id:
@@ -520,6 +609,20 @@ def _plain_text(rich_text: list[dict[str, Any]]) -> str:
         part.get("plain_text") or part.get("text", {}).get("content", "")
         for part in rich_text
     )
+
+
+def _normalize_name(value: str) -> str:
+    return re.sub(r"\s+", "", value).lower()
+
+
+def _incident_tokens(value: str) -> list[str]:
+    ignored = {"오픈뱅킹", "펌뱅킹", "정상화", "복구", "타임아웃", "장애", "완료"}
+    cleaned = re.sub(r"[\[\]()/|,]", " ", value)
+    return [
+        token
+        for token in re.findall(r"[가-힣A-Za-z0-9]+", cleaned)
+        if len(token) >= 2 and token not in ignored
+    ]
 
 
 def _callout(icon: str, value: str) -> dict[str, Any]:

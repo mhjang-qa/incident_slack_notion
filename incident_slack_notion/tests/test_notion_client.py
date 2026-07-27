@@ -116,6 +116,13 @@ class NotionClientTest(unittest.TestCase):
         self.assertIn("LLM 요약", children[1]["callout"]["rich_text"][0]["text"]["content"])
         self.assertIn("외부 은행", children[1]["callout"]["rich_text"][0]["text"]["content"])
 
+    def test_resolves_property_name_with_whitespace_difference(self) -> None:
+        client = NotionIncidentClient("token", "database-id")
+        client.schema["심각도\n  (Severity)"] = {"type": "select", "select": {}}
+        client.resolved_names = client._resolve_property_names()
+
+        self.assertEqual(client.resolved_names["severity"], "심각도\n  (Severity)")
+
 
 if __name__ == "__main__":
     unittest.main()
