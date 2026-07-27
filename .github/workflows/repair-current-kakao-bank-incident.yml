@@ -1,5 +1,7 @@
 name: Repair current Kakao Bank incident page
 
+# One-off repair for the 2026-07-27 Kakao Bank incident.
+
 on:
   push:
     branches:
