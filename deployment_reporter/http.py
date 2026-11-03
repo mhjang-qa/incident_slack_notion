@@ -10,6 +10,12 @@ class APIError(RuntimeError):
     pass
 
 
+class RateLimitError(APIError):
+    def __init__(self, message, retry_after):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
 def retry_delay(value, attempt):
     try:
         return max(0, float(value))
@@ -36,6 +42,18 @@ class Transport:
                 self.sleep(min(2 ** attempt, 30))
                 continue
             if response.status_code == 429 or response.status_code >= 500:
+                if response.status_code == 429 and urlparse(url).hostname == "generativelanguage.googleapis.com":
+                    try:
+                        details = response.json().get("error", {}).get("details", [])
+                        daily = any("perday" in str(v.get("quotaId", "")).lower()
+                                    for item in details for v in item.get("violations", []))
+                        waits = [float(item["retryDelay"].removesuffix("s")) for item in details
+                                 if item.get("@type", "").endswith("RetryInfo") and isinstance(item.get("retryDelay"), str)]
+                        wait = max(waits) if waits else 3600
+                        if daily:
+                            raise RateLimitError("Gemini daily quota exhausted; retained for automatic retry after reset", max(60, wait))
+                    except (ValueError, TypeError, AttributeError):
+                        pass
                 # A 429 explicitly rejected a request; never repeat ambiguous creates after 5xx.
                 if (retry_safe or response.status_code == 429) and attempt + 1 < self.retries:
                     delay = response.headers.get("Retry-After")
@@ -48,7 +66,10 @@ class Transport:
                             delay = max(delays) if delays else None
                         except (ValueError, TypeError, AttributeError):
                             delay = None
-                    self.sleep(retry_delay(delay, attempt))
+                    seconds = retry_delay(delay, attempt)
+                    if response.status_code == 429 and seconds > 60:
+                        raise RateLimitError("API rate limit; retained for a later automatic retry", seconds)
+                    self.sleep(seconds)
                     continue
             if response.is_error:
                 # Never include provider bodies, request URLs (keys), or tokens in errors/logs.

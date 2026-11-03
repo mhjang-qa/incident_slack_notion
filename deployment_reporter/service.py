@@ -51,10 +51,11 @@ class Reporter:
 
     def _fail(self, event_id, exc):
         # Provider error bodies and original Slack text never enter operational logs.
-        from .http import APIError
+        from .http import APIError, RateLimitError
         message = str(exc) if isinstance(exc, APIError) else type(exc).__name__ + ": operation failed; check configuration and retry"
         event = self.repo.event(event_id)
-        self.repo.update(event_id, state="Failed", sync_state="Failed", error=message, retries=event["retries"] + 1)
+        deferred = isinstance(exc, RateLimitError)
+        self.repo.update(event_id, state="Deferred" if deferred else "Failed", sync_state="Pending" if deferred else "Failed", error=message, retries=event["retries"] + 1)
         self.repo.log("Error", message, event_id)
         LOG.error("event=%s %s", event_id, message)
 
@@ -62,9 +63,18 @@ class Reporter:
         fingerprint = evidence_digest(evidence)
         event = self.repo.event(event_id)
         if force or event["analyzed_digest"] != fingerprint:
+            from .http import RateLimitError
+            cooldown_key = "gemini_cooldown:" + self.gemini.model
+            until = self.repo.get_value(cooldown_key, 0)
+            if until > time.time():
+                raise RateLimitError("Gemini quota cooldown; retained for automatic retry", until - time.time())
             self.repo.update(event_id, state="Analyzing")
             self.repo.log("Gemini", "Structured analysis requested", event_id)
-            report, response = self.gemini.analyze(evidence)
+            try:
+                report, response = self.gemini.analyze(evidence)
+            except RateLimitError as exc:
+                self.repo.set_value(cooldown_key, time.time() + exc.retry_after)
+                raise
             self.repo.add_analysis(event_id, report, response, self.gemini.model, self.gemini.prompt_version, fingerprint)
             self.repo.log("Validation", "Schema validated; analysis revision saved", event_id)
         elif event["state"] == "Failed":
@@ -91,7 +101,7 @@ class Reporter:
             for channel in channels:
                 known = [e for e in self.repo.events() if e["channel"] == channel and e["workspace"] == workspace]
                 # Revisit active events even when batch lookback is smaller than the tracking window.
-                active = [e for e in known if float(e["ts"]) + self.settings.window_hours * 3600 >= current or e["state"] in {"Failed", "Detected", "Analyzing"} or (e["stop_reason"] and not e["stop_reason"].startswith("window closed"))]
+                active = [e for e in known if float(e["ts"]) + self.settings.window_hours * 3600 >= current or e["state"] in {"Failed", "Deferred", "Detected", "Analyzing"} or (e["stop_reason"] and not e["stop_reason"].startswith("window closed"))]
                 oldest = min([current - (days or self.settings.lookback_days) * 86400] + [float(e["ts"]) for e in active])
                 try:
                     messages = self.slack.history(channel, oldest, current)
@@ -132,7 +142,8 @@ class Reporter:
                         results.append({"id": event_id, "state": self.repo.event(event_id)["state"]})
                     except Exception as exc:
                         self._fail(event_id, exc)
-                        results.append({"id": event_id, "error": self.repo.event(event_id)["error"]})
+                        from .http import RateLimitError
+                        results.append({"id": event_id, "error": self.repo.event(event_id)["error"], "deferred": isinstance(exc, RateLimitError)})
         return results
 
     def analyze(self, event_id, recollect=False):

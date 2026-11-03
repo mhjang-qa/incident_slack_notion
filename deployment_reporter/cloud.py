@@ -111,10 +111,11 @@ def run():
         with repo.lock():
             layout = bootstrap(notion, repo, settings.notion_page_id)
         results = reporter.batch(sync=True)
-        failures = sum("error" in r for r in results)
-        print(f"Deployment sync: processed={len(results)} failed={failures}")
+        failures = sum("error" in r and not r.get("deferred") for r in results)
+        deferred = sum(bool(r.get("deferred")) for r in results)
+        print(f"Deployment sync: checked={len(results)} failed={failures} deferred_for_quota={deferred}")
         # Summary URLs are not emitted to public logs. Authenticated Notion is the output surface.
-        repo.set_value("cloud_last_result", {"processed": len(results), "failed": failures, "report_root": layout["root"]})
+        repo.set_value("cloud_last_result", {"checked": len(results), "failed": failures, "deferred": deferred, "report_root": layout["root"]})
         return 1 if failures else 0
     finally:
         save_state(settings.database_path, encrypted, secret)
