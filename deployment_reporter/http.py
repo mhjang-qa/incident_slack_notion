@@ -1,0 +1,46 @@
+"""Bounded API retries; ambiguous remote creates are recovered by lookup."""
+import time
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+import httpx
+
+
+class APIError(RuntimeError):
+    pass
+
+
+def retry_delay(value, attempt):
+    try:
+        return max(0, float(value))
+    except (ValueError, TypeError):
+        try:
+            return max(0, (parsedate_to_datetime(value) - datetime.now(timezone.utc)).total_seconds())
+        except (ValueError, TypeError):
+            return min(2 ** attempt, 30)
+
+
+class Transport:
+    def __init__(self, client=None, retries=3, sleep=time.sleep):
+        self.client = client or httpx.Client(timeout=45)
+        self.retries = retries
+        self.sleep = sleep
+
+    def request(self, method, url, *, retry_safe=True, **kwargs):
+        for attempt in range(self.retries):
+            try:
+                response = self.client.request(method, url, **kwargs)
+            except httpx.TransportError:
+                if not retry_safe or attempt + 1 == self.retries:
+                    raise APIError("Network failure; retry this event (remote result may need recovery)") from None
+                self.sleep(min(2 ** attempt, 30))
+                continue
+            if response.status_code == 429 or response.status_code >= 500:
+                # A 429 explicitly rejected a request; never repeat ambiguous creates after 5xx.
+                if (retry_safe or response.status_code == 429) and attempt + 1 < self.retries:
+                    self.sleep(retry_delay(response.headers.get("Retry-After"), attempt))
+                    continue
+            if response.is_error:
+                # Never include provider bodies, request URLs (keys), or tokens in errors/logs.
+                raise APIError(f"API HTTP {response.status_code}; check credentials, permissions, schema and retry")
+            return response.json()
+        raise APIError("API retry limit reached")

@@ -1,0 +1,64 @@
+name: Slack deployment to Notion
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - deployment_reporter/**
+      - deployment_config/**
+      - deployment-requirements.txt
+      - .github/workflows/deployment-sync.yml
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deployment-slack-notion-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      SLACK_THREAD_TOKEN: ${{ secrets.SLACK_THREAD_TOKEN }}
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ vars.DEPLOYMENT_GEMINI_MODEL || 'gemini-2.5-flash' }}
+      DEPLOYMENT_SLACK_CHANNEL_IDS: ${{ vars.DEPLOYMENT_SLACK_CHANNEL_IDS }}
+      DEPLOYMENT_NOTION_PAGE_ID: ${{ vars.DEPLOYMENT_NOTION_PAGE_ID }}
+      DEPLOYMENT_STATE_KEY: ${{ secrets.DEPLOYMENT_STATE_KEY }}
+      INCIDENT_NOTION_DATABASE_ID: ${{ vars.NOTION_DATABASE_ID }}
+      INCIDENT_SLACK_CHANNEL_ID: ${{ vars.SLACK_CHANNEL_ID }}
+      DATABASE_PATH: data/deployment_reporter.db
+      ENCRYPTED_STATE_PATH: cloud-state/deployment-state.enc
+      SERVICE_ALIASES_PATH: deployment_config/service_aliases.json
+      AUTO_SYNC: 'true'
+      WINDOW_HOURS: '48'
+      LOOKBACK_DAYS: '7'
+      TIMEZONE: Asia/Seoul
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install deployment reporter dependencies
+        run: pip install -r deployment-requirements.txt
+      - name: Restore authenticated encrypted state
+        uses: actions/cache/restore@v5
+        with:
+          path: cloud-state/deployment-state.enc
+          key: deployment-state-encrypted-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: deployment-state-encrypted-v1-
+      - name: Automatically collect, classify and publish deployment reports
+        run: python -m deployment_reporter.cloud
+      - name: Save encrypted state even after partial sync failure
+        if: ${{ always() && !cancelled() }}
+        uses: actions/cache/save@v5
+        with:
+          path: cloud-state/deployment-state.enc
+          key: deployment-state-encrypted-v1-${{ github.run_id }}-${{ github.run_attempt }}
