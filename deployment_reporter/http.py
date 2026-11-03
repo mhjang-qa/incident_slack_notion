@@ -38,7 +38,17 @@ class Transport:
             if response.status_code == 429 or response.status_code >= 500:
                 # A 429 explicitly rejected a request; never repeat ambiguous creates after 5xx.
                 if (retry_safe or response.status_code == 429) and attempt + 1 < self.retries:
-                    self.sleep(retry_delay(response.headers.get("Retry-After"), attempt))
+                    delay = response.headers.get("Retry-After")
+                    # Gemini commonly sends google.rpc.RetryInfo in JSON, without Retry-After.
+                    if response.status_code == 429 and not delay and "generativelanguage.googleapis.com" == urlparse(url).hostname:
+                        try:
+                            details = response.json().get("error", {}).get("details", [])
+                            delays = [float(item["retryDelay"].removesuffix("s")) for item in details
+                                      if item.get("@type", "").endswith("RetryInfo") and isinstance(item.get("retryDelay"), str)]
+                            delay = max(delays) if delays else None
+                        except (ValueError, TypeError, AttributeError):
+                            delay = None
+                    self.sleep(retry_delay(delay, attempt))
                     continue
             if response.is_error:
                 # Never include provider bodies, request URLs (keys), or tokens in errors/logs.
