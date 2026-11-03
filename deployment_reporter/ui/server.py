@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+import json
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -62,6 +63,11 @@ def create_app(reporter=None):
     def settings():
         return {"settings": reporter.settings.public(), "scheduler_running": scheduler.running,
                 "credentials": {"slack": bool(reporter.settings.slack_bot_token.get_secret_value()), "notion": bool(reporter.settings.notion_token.get_secret_value()), "gemini": bool(reporter.settings.gemini_api_key.get_secret_value())}}
+
+    @app.get("/api/automation")
+    def automation():
+        path = Path("config/cloud.json")
+        return json.loads(path.read_text()) if path.exists() else {"enabled": False}
 
     @app.put("/api/settings")
     def update_settings(changes: dict):
