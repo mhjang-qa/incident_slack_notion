@@ -3,6 +3,7 @@ import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 import httpx
+from urllib.parse import urlparse
 
 
 class APIError(RuntimeError):
@@ -41,6 +42,8 @@ class Transport:
                     continue
             if response.is_error:
                 # Never include provider bodies, request URLs (keys), or tokens in errors/logs.
-                raise APIError(f"API HTTP {response.status_code}; check credentials, permissions, schema and retry")
+                host = urlparse(url).hostname
+                provider = {"slack.com": "Slack", "api.notion.com": "Notion", "generativelanguage.googleapis.com": "Gemini"}.get(host, "API")
+                raise APIError(f"API HTTP {response.status_code} ({provider}); check credentials, permissions, schema and retry")
             return response.json()
         raise APIError("API retry limit reached")
