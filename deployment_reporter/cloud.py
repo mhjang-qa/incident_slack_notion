@@ -16,6 +16,7 @@ from .storage.repository import Repository
 from .storage.encrypted import restore_state, save_state
 from .backfill import Backfills, progress_text
 from .domain.period import DateRange
+from .notion.statistics import StatisticsSync
 
 
 def page_title(page):
@@ -99,6 +100,7 @@ def run():
     encrypted = os.getenv("ENCRYPTED_STATE_PATH", "cloud-state/deployment-state.enc")
     restore_state(encrypted, settings.database_path, secret)
     repo = Repository(settings.database_path)
+    layout = None
     try:
         slack = SlackClient(settings)
         slack.test()
@@ -113,7 +115,6 @@ def run():
         repo.set_value("runtime", {"slack_channel_ids": settings.slack_channel_ids, "auto_sync": True})
         settings.auto_sync = True
         reporter = Reporter(settings, repo=repo, slack=slack, notion=notion)
-        reporter.gemini.test()
         history = Backfills(reporter)
         if period:
             if os.getenv("DEPLOYMENT_SLACK_CHANNEL_IDS"):
@@ -127,6 +128,7 @@ def run():
             history.create(period.start_date, period.end_date, channels=historical_channels, sync=True)
         with repo.lock():
             layout = bootstrap(notion, repo, settings.notion_page_id)
+        reporter.gemini.test()
         results = reporter.batch(sync=True)
         historical = history.run_pending(max_days=3, max_events=10, budget_seconds=600)
         if historical:
@@ -145,7 +147,12 @@ def run():
         repo.set_value("cloud_last_result", {"checked": len(results), "failed": failures, "deferred": deferred, "report_root": layout["root"]})
         return 1 if failures else 0
     finally:
-        save_state(settings.database_path, encrypted, secret)
+        try:
+            if layout:
+                with repo.lock():
+                    StatisticsSync(notion, repo, settings).refresh(layout)
+        finally:
+            save_state(settings.database_path, encrypted, secret)
 
 
 if __name__ == "__main__":

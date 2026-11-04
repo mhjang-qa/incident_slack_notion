@@ -30,6 +30,7 @@ def main():
     history.add_argument("--sync", action="store_true")
     sub.add_parser("backfills")
     sub.add_parser("resume-backfills")
+    sub.add_parser("statistics", help="Refresh Notion monthly/weekly statistics without Gemini")
     args = parser.parse_args()
     Path("logs").mkdir(exist_ok=True)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s", handlers=[logging.StreamHandler(), logging.FileHandler("logs/deployment_reporter.log")])
@@ -62,6 +63,10 @@ def main():
     elif args.command == "resume-backfills":
         from .backfill import Backfills
         output = Backfills(reporter).run_pending()
+    elif args.command == "statistics":
+        from .notion.statistics import StatisticsSync
+        with reporter.repo.lock():
+            output = StatisticsSync(reporter.notion, reporter.repo, reporter.settings).refresh()
     elif args.command == "preview":
         output = reporter.preview(args.event_id)
     elif args.command in {"reanalyze", "retry"}:

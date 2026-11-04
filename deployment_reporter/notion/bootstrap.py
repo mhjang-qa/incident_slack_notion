@@ -2,6 +2,7 @@ from .schema import rich, text_blocks, schema
 from ..http import APIError
 
 MARKER = "Managed by Deployment Reporter / schema-v1"
+REPORT_INTRO = "📊 Summary: 월간·주간 통계와 배포가 많은 서비스·프로젝트·영역. 📋 배포 이력: 개별 배포의 상세 내용. 🗃 Raw Data: 원문과 분류 근거."
 
 
 def bootstrap(client, repo, parent):
@@ -20,15 +21,15 @@ def bootstrap(client, repo, parent):
                     state["root"] = child["id"]
         if not state.get("root"):
             # Do not adopt an unrelated page with the same title.
-            page = client.call("POST", "/pages", {"parent": {"page_id": parent}, "properties": {"title": {"title": rich("Deployment Report")}}, "children": text_blocks(MARKER) + text_blocks("📊 Summary: 배포별 요약과 분석 이력. 🗃 Raw Data: 원문과 분류 근거. QA는 기본 확인 필요이며 배포 완료와 검증 완료는 구분합니다.")}, retry_safe=False)
+            page = client.call("POST", "/pages", {"parent": {"page_id": parent}, "properties": {"title": {"title": rich("Deployment Report")}}, "children": text_blocks(MARKER) + text_blocks(REPORT_INTRO)}, retry_safe=False)
             state["root"] = page["id"]
         repo.set_value(key, state)
     summary_schema, raw_schema = schema()
-    for name, title, properties in (("summary", "📊 Summary", summary_schema), ("raw", "🗃 Raw Data", raw_schema)):
+    for name, title, properties in (("summary", "📋 배포 이력", summary_schema), ("raw", "🗃 Raw Data", raw_schema)):
         if name not in state:
             found = None
             for child in client.children(state["root"]):
-                if child["type"] == "child_database" and child["child_database"]["title"] == title:
+                if child["type"] == "child_database" and child["child_database"]["title"] in ({title, "📊 Summary"} if name == "summary" else {title}):
                     db = client.call("GET", f'/databases/{child["id"]}')
                     description = "".join(t.get("plain_text", t.get("text", {}).get("content", "")) for t in db.get("description", []))
                     if description == MARKER:

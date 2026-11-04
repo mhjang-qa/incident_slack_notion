@@ -34,6 +34,21 @@ class NotionClient:
             raise APIError("Duplicate Notion keys detected; manual review needed")
         return data["results"][0] if data["results"] else None
 
+    def query_all(self, source_id):
+        result, cursor, seen = [], None, set()
+        while True:
+            payload = {"page_size": 100}
+            if cursor:
+                payload["start_cursor"] = cursor
+            data = self.call("POST", f"/data_sources/{source_id}/query", payload)
+            result.extend(data["results"])
+            if not data.get("has_more"):
+                return result
+            cursor = data.get("next_cursor")
+            if not cursor or cursor in seen:
+                raise APIError("Notion statistics pagination incomplete")
+            seen.add(cursor)
+
     def upsert(self, source_id, key_property, key, properties):
         page = self.find(source_id, key_property, key)
         if page:
