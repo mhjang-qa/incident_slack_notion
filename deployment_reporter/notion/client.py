@@ -90,6 +90,15 @@ class NotionClient:
                 # Recover an ambiguous append by finding its marker on the next attempt.
                 self.call("PATCH", f"/blocks/{page_id}/children", {"children": [{"object": "block", "type": "callout", "callout": content}]}, retry_safe=False)
 
+    def upload_png(self, content):
+        upload = self.call("POST", "/file_uploads", {"mode": "single_part", "filename": "deployment-statistics.png", "content_type": "image/png"}, retry_safe=False)
+        result = self.http.request("POST", "https://api.notion.com/v1/file_uploads/" + upload["id"] + "/send",
+            headers={"Authorization": "Bearer " + self.settings.notion_token.get_secret_value(), "Notion-Version": self.settings.notion_version},
+            files={"file": ("deployment-statistics.png", content, "image/png")}, retry_safe=False)
+        if result.get("status") != "uploaded":
+            raise APIError("Notion chart upload did not complete")
+        return upload["id"]
+
     def test(self):
         if not self.settings.notion_page_id:
             raise APIError("NOTION_PAGE_ID (QA parent page) is required")

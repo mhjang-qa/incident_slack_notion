@@ -106,8 +106,15 @@ class StatisticsSync:
             if plain(source.get("title", [])) == "📊 Summary":
                 self.client.call("PATCH", "/data_sources/" + layout["summary"]["source"], {"title": rich("📋 배포 이력")})
             self.repo.set_value(key, True)
-        page_id = self.owned_page(layout["root"], "📊 Summary", "summary")
-        self.root_link(layout["root"], page_id)
+        candidates = self.client.children(layout["root"]) + self.client.children(layout["lowdata"])
+        for child in candidates:
+            if child["type"] == "child_page" and child["child_page"]["title"] == "📊 Summary" and any(b["type"] == "paragraph" and plain(b["paragraph"]["rich_text"]) == STATS_MARKER for b in self.client.children(child["id"])):
+                self.repo.set_value("statistics_page:" + layout["lowdata"] + ":summary", child["id"])
+        page_id = self.owned_page(layout["lowdata"], "📊 Summary", "summary")
+        parent = self.client.call("GET", "/pages/" + page_id).get("parent", {})
+        if parent.get("page_id") != layout["lowdata"]:
+            self.client.call("POST", "/pages/" + page_id + "/move", {"parent": {"type": "page_id", "page_id": layout["lowdata"]}}, retry_safe=False)
+        self.repo.set_value("statistics_page:" + layout["lowdata"] + ":summary", page_id)
         return page_id
 
     def root_link(self, root, statistics_page):
@@ -145,13 +152,15 @@ class StatisticsSync:
         summary = self.prepare(layout)
         source = self.client.query_all(layout["summary"]["source"])
         statistics = Statistics(source, self.settings.timezone, self.settings.aliases, today, self.repo.backfills())
+        from .dashboard import refresh_dashboard
+        refresh_dashboard(self.client, self.repo, layout["root"], layout["lowdata"], statistics, source)
         payload = {"version": 1, "date": statistics.today.isoformat(), "records": [r.payload() for r in statistics.records],
                    "duplicates": statistics.duplicates, "rejected": statistics.rejected,
                    "jobs": [{k: j[k] for k in ("request", "state", "cursor", "discovered", "processed")} for j in statistics.jobs]}
         fingerprint = digest(payload)
         key = "statistics_fingerprint:" + summary
         if self.repo.get_value(key) == fingerprint:
-            return {"url": notion_url(summary), "count": len(statistics.records), "updated": False}
+            return {"url": notion_url(layout["root"]), "count": len(statistics.records), "updated": False}
         period_rows = {"month": [], "week": []}
         manifest_key = "statistics_periods:" + summary
         manifest = self.repo.get_value(manifest_key, {"month": [], "week": []})
@@ -209,5 +218,5 @@ class StatisticsSync:
         self.render_rankings(summary, statistics, statistics.records)
         self.repo.set_value(manifest_key, manifest)
         self.repo.set_value(key, fingerprint)
-        self.repo.set_value("statistics_latest", {"page_id": summary, "count": len(statistics.records), "undated": statistics.undated})
-        return {"url": notion_url(summary), "count": len(statistics.records), "updated": True}
+        self.repo.set_value("statistics_latest", {"page_id": layout["root"], "detail_page_id": summary, "count": len(statistics.records), "undated": statistics.undated})
+        return {"url": notion_url(layout["root"]), "count": len(statistics.records), "updated": True}

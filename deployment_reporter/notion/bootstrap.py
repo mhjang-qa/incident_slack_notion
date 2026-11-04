@@ -24,11 +24,15 @@ def bootstrap(client, repo, parent):
             page = client.call("POST", "/pages", {"parent": {"page_id": parent}, "properties": {"title": {"title": rich("Deployment Report")}}, "children": text_blocks(MARKER) + text_blocks(REPORT_INTRO)}, retry_safe=False)
             state["root"] = page["id"]
         repo.set_value(key, state)
+    if not state.get("lowdata"):
+        page = client.child_page(state["root"], "lowdata", text_blocks(MARKER))
+        state["lowdata"] = page["id"]
+        repo.set_value(key, state)
     summary_schema, raw_schema = schema()
     for name, title, properties in (("summary", "📋 배포 이력", summary_schema), ("raw", "🗃 Raw Data", raw_schema)):
         if name not in state:
             found = None
-            for child in client.children(state["root"]):
+            for child in client.children(state["root"]) + client.children(state["lowdata"]):
                 if child["type"] == "child_database" and child["child_database"]["title"] in ({title, "📊 Summary"} if name == "summary" else {title}):
                     db = client.call("GET", f'/databases/{child["id"]}')
                     description = "".join(t.get("plain_text", t.get("text", {}).get("content", "")) for t in db.get("description", []))
@@ -36,13 +40,18 @@ def bootstrap(client, repo, parent):
                         if found:
                             raise APIError("Multiple managed databases; review required")
                         found = db
-            db = found or client.call("POST", "/databases", {"parent": {"type": "page_id", "page_id": state["root"]}, "title": rich(title), "description": rich(MARKER), "is_inline": True, "initial_data_source": {"properties": properties}}, retry_safe=False)
+            db = found or client.call("POST", "/databases", {"parent": {"type": "page_id", "page_id": state["lowdata"]}, "title": rich(title), "description": rich(MARKER), "is_inline": True, "initial_data_source": {"properties": properties}}, retry_safe=False)
             if not db.get("data_sources"):
                 db = client.call("GET", f'/databases/{db["id"]}')
             if len(db.get("data_sources", [])) != 1:
                 raise APIError("Expected one managed Notion data source")
             state[name] = {"database": db["id"], "source": db["data_sources"][0]["id"], "url": db.get("url", "https://www.notion.so/" + db["id"].replace("-", ""))}
             repo.set_value(key, state)
+        db = client.call("GET", "/databases/" + state[name]["database"])
+        if db.get("parent", {}).get("page_id") != state["lowdata"]:
+            if "".join(t.get("plain_text", t.get("text", {}).get("content", "")) for t in db.get("description", [])) != MARKER:
+                raise APIError("Database ownership marker missing; move refused")
+            client.call("PATCH", "/databases/" + state[name]["database"], {"parent": {"type": "page_id", "page_id": state["lowdata"]}})
         actual = client.call("GET", f'/data_sources/{state[name]["source"]}')["properties"]
         for prop, spec in properties.items():
             expected = next(iter(spec))

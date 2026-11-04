@@ -139,7 +139,7 @@ def run():
                 results.append({"error": "Historical collection failed; saved for automatic retry"})
         jobs = repo.backfills()
         if jobs:
-            notion.current_sections(layout["root"], {"과거 수집 진행": progress_text(jobs)})
+            notion.current_sections(layout["lowdata"], {"과거 수집 진행": progress_text(jobs)})
         failures = sum("error" in r and not r.get("deferred") for r in results)
         deferred = sum(bool(r.get("deferred")) for r in results)
         print(f"Deployment sync: checked={len(results)} failed={failures} deferred_for_quota={deferred}")
