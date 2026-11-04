@@ -119,7 +119,12 @@ def run():
         reporter = Reporter(settings, repo=repo, slack=slack, notion=notion)
         history = Backfills(reporter)
         request_service = SyncRequests.configured()
-        requests = request_service.pending() if request_service else []
+        try:
+            requests = request_service.pending() if request_service else []
+        except APIError:
+            # A temporarily unavailable request screen must not stop scheduled reporting.
+            print("Sync request service unavailable; regular collection continues")
+            requests = []
         if period or any(r.get("input", {}).get("mode") == "backfill" for r in requests):
             if os.getenv("DEPLOYMENT_SLACK_CHANNEL_IDS"):
                 historical_channels = settings.channels
