@@ -8,7 +8,7 @@ from ..storage.repository import digest
 from .schema import rich
 from .bootstrap import MARKER, REPORT_INTRO
 
-SYNC_URL = 'https://deployment-sync-qa.nearfinch1.chatgpt.site'
+SYNC_URL = 'https://deployment-sync-qa.nearfinch1.chatgpt.site/'
 CAPTION = '서비스·대표 영역별 배포 비중 (전체 등록 공지 기준)'
 
 
