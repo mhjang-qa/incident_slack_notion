@@ -62,14 +62,17 @@ def refresh_dashboard(client, repo, root, lowdata, statistics, pages):
     children = client.children(root)
     marker = next(b for b in children if b['type'] == 'paragraph' and plain(b['paragraph']['rich_text']) == MARKER)
     after = marker['id']
-    image = next((b for b in children if b['type'] == 'image' and plain(b['image'].get('caption', [])).startswith((CAPTION, '배포 현황 · dashboard-v1 · '))), None)
+    owned_images = [b for b in children if b['type'] == 'image' and plain(b['image'].get('caption', [])).startswith((CAPTION, '배포 현황 · dashboard-v1 · '))]
+    image = owned_images[0] if owned_images else None
     if not image or repo.get_value('dashboard_chart:' + root) != fingerprint or plain(image['image'].get('caption', [])) != CAPTION:
         upload = client.upload_png(chart_png(statistics, pages))
         content = {'type': 'file_upload', 'file_upload': {'id': upload}, 'caption': rich(CAPTION)}
-        if image:
-            client.call('PATCH', '/blocks/' + image['id'], {'image': content})
-        else:
-            image = client.call('PATCH', '/blocks/' + root + '/children', {'after': after, 'children': [{'object': 'block', 'type': 'image', 'image': content}]}, retry_safe=False)['results'][0]
+        # Notion accepts uploaded files on append, but cannot replace a hosted image in-place.
+        # Create the replacement first; recovery removes only our superseded chart blocks.
+        image = client.call('PATCH', '/blocks/' + root + '/children', {'after': after, 'children': [{'object': 'block', 'type': 'image', 'image': content}]}, retry_safe=False)['results'][0]
+    for old in owned_images:
+        if old['id'] != image['id']:
+            client.call('DELETE', '/blocks/' + old['id'])
     repo.set_value('dashboard_chart:' + root, fingerprint)
     after = image['id']
     # Stable, concise labels also serve as recovery markers after state-cache loss.
