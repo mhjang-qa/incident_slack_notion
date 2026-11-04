@@ -17,6 +17,7 @@ from .storage.encrypted import restore_state, save_state
 from .backfill import Backfills, progress_text
 from .domain.period import DateRange
 from .notion.statistics import StatisticsSync
+from .requests import SyncRequests
 
 
 def page_title(page):
@@ -101,6 +102,7 @@ def run():
     restore_state(encrypted, settings.database_path, secret)
     repo = Repository(settings.database_path)
     layout = None
+    request_service, accepted, request_result = None, [], None
     try:
         slack = SlackClient(settings)
         slack.test()
@@ -116,7 +118,9 @@ def run():
         settings.auto_sync = True
         reporter = Reporter(settings, repo=repo, slack=slack, notion=notion)
         history = Backfills(reporter)
-        if period:
+        request_service = SyncRequests.configured()
+        requests = request_service.pending() if request_service else []
+        if period or any(r.get("input", {}).get("mode") == "backfill" for r in requests):
             if os.getenv("DEPLOYMENT_SLACK_CHANNEL_IDS"):
                 historical_channels = settings.channels
             else:
@@ -125,7 +129,10 @@ def run():
                     historical_channels = [c["id"] for c in slack.channels() if c.get("is_member") and not c.get("is_archived")]
                 except APIError:
                     historical_channels = settings.channels
-            history.create(period.start_date, period.end_date, channels=historical_channels, sync=True)
+            if period:
+                history.create(period.start_date, period.end_date, channels=historical_channels, sync=True)
+        if request_service:
+            accepted = request_service.accept(requests, history, historical_channels if any(r.get("input", {}).get("mode") == "backfill" for r in requests) else settings.channels)
         with repo.lock():
             layout = bootstrap(notion, repo, settings.notion_page_id)
         reporter.gemini.test()
@@ -144,6 +151,7 @@ def run():
         deferred = sum(bool(r.get("deferred")) for r in results)
         print(f"Deployment sync: checked={len(results)} failed={failures} deferred_for_quota={deferred}")
         # Summary URLs are not emitted to public logs. Authenticated Notion is the output surface.
+        request_result = {"failed": failures, "deferred": deferred}
         repo.set_value("cloud_last_result", {"checked": len(results), "failed": failures, "deferred": deferred, "report_root": layout["root"]})
         return 1 if failures else 0
     finally:
@@ -153,6 +161,9 @@ def run():
                     StatisticsSync(notion, repo, settings).refresh(layout)
         finally:
             save_state(settings.database_path, encrypted, secret)
+        # Publish receipts only after Notion refresh and encrypted durable checkpoint succeeded.
+        if request_service and accepted:
+            request_service.publish(accepted, repo, request_result)
 
 
 if __name__ == "__main__":

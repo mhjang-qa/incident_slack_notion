@@ -8,7 +8,7 @@ from ..storage.repository import digest
 from .schema import rich
 from .bootstrap import MARKER, REPORT_INTRO
 
-SYNC_URL = 'https://github.com/mhjang-qa/incident_slack_notion/actions/workflows/deployment-sync.yml'
+SYNC_URL = 'https://deployment-sync-qa.nearfinch1.chatgpt.site'
 CAPTION = '서비스·대표 영역별 배포 비중 (전체 등록 공지 기준)'
 
 
@@ -76,7 +76,7 @@ def refresh_dashboard(client, repo, root, lowdata, statistics, pages):
     repo.set_value('dashboard_chart:' + root, fingerprint)
     after = image['id']
     # Stable, concise labels also serve as recovery markers after state-cache loss.
-    for label, content, icon in [('요약', rich('요약\n' + summary), '📊'), ('동기화', [*rich('동기화\n'), {'type': 'text', 'text': {'content': '🔄 동기화 / 과거 수집 기간 선택', 'link': {'url': SYNC_URL}}}, *rich('\nRun workflow → sync(최근) 또는 backfill(기간 지정) 선택')], '🔄')]:
+    for label, content, icon in [('요약', rich('요약\n' + summary), '📊'), ('동기화', [*rich('동기화\n'), {'type': 'text', 'text': {'content': '🔄 동기화 / 과거 수집 기간 선택', 'link': {'url': SYNC_URL}}}, *rich('\n최근 동기화 또는 과거 기간을 선택해 요청하세요.')], '🔄')]:
         existing = next((b for b in children if b['type'] == 'callout' and plain(b['callout']['rich_text']).startswith(label + '\n')), None)
         body = {'rich_text': content, 'icon': {'type': 'emoji', 'emoji': icon}}
         if existing:

@@ -36,3 +36,10 @@ Summary는 월·주간 통계와 서비스/프로젝트/기술 영역/환경별 
 Deployment Report 상단에는 전체 등록 공지 기준 서비스별·대표 Component별 도넛 차트와 전체/이번 달/이번 주 건수, 이번 달 최다 서비스만 표시합니다. 복수 Components는 대표 Component 한 개로 집계하여 파이 합계를 보존합니다. PNG는 Notion에 직접 업로드하며 공개 이미지 호스팅은 사용하지 않습니다. 상세 통계·배포 이력·원문 DB는 lowdata 하위로 이동하며 기존 ID와 레코드를 유지합니다.
 
 동기화 링크는 GitHub Actions 수집 화면을 엽니다. 저장소 실행 권한이 있는 계정으로 로그인한 후 Run workflow에서 sync를 선택하면 최근 수집, backfill과 start_date/end_date를 지정하면 과거 수집을 요청합니다. 자동 실행은 기존 15분 주기를 유지합니다.
+
+
+## 전용 동기화 웹 화면
+
+Notion 동기화 링크는 https://deployment-sync-qa.nearfinch1.chatgpt.site 로 연결합니다. 사이트 소유자만 ChatGPT 로그인 후 최근 동기화 또는 과거 날짜 범위를 요청하고 상태를 볼 수 있습니다. 수집 요청 문서는 비공개 R2에 저장하며 Slack 원문·Notion 키·GitHub 키는 웹 사이트로 전달하지 않습니다. 사이트 서비스 키와 기존 사이트 서비스 액세스 토큰은 Actions 시크릿에 보관합니다.
+
+5분 주기의 deployment-requests.yml은 대기 요청이 있고 수집 작업이 실행 중이지 않을 때 저장소 범위 GITHUB_TOKEN으로 기존 deployment-sync.yml을 호출합니다. 기존 15분 수집도 요청을 확인합니다. 실제 스케줄 시작은 GitHub 대기열에 따라 늦어질 수 있습니다. 수집기는 요청을 날짜 범위 작업으로 멱등 등록한 후 Notion 반영·암호화 상태 저장이 성공한 다음에만 접수 상태를 갱신합니다. AI 쿼터 대기와 완료를 구분합니다.

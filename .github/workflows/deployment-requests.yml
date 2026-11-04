@@ -1,0 +1,28 @@
+name: Deployment sync request listener
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: deployment-sync-request-listener
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SYNC_SITE_URL: ${{ vars.SYNC_SITE_URL }}
+      SYNC_SITE_BEARER: ${{ secrets.SYNC_SITE_BEARER }}
+      SYNC_SERVICE_KEY: ${{ secrets.SYNC_SERVICE_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install httpx pydantic
+      - name: Start sync worker only when requests are waiting
+        run: python -m deployment_reporter.requests

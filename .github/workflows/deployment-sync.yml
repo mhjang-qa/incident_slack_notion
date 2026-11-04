@@ -39,6 +39,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      SYNC_SITE_URL: ${{ vars.SYNC_SITE_URL }}
+      SYNC_SITE_BEARER: ${{ secrets.SYNC_SITE_BEARER }}
+      SYNC_SERVICE_KEY: ${{ secrets.SYNC_SERVICE_KEY }}
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
       SLACK_THREAD_TOKEN: ${{ secrets.SLACK_THREAD_TOKEN }}
       NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
