@@ -11,7 +11,9 @@ def main():
     parser = argparse.ArgumentParser(description="Slack deployment reporter (Preview by default)")
     sub = parser.add_subparsers(dest="command", required=True)
     batch = sub.add_parser("batch")
-    batch.add_argument("--days", type=int, default=7, choices=range(1, 91), metavar="1..90")
+    batch.add_argument("--days", type=int, choices=range(1, 91), metavar="1..90")
+    batch.add_argument("--start-date")
+    batch.add_argument("--end-date")
     batch.add_argument("--sync", action="store_true", help="Write Summary + Raw Data to Notion")
     batch.add_argument("--search-only", action="store_true")
     for name in ("preview", "reanalyze", "retry", "sync"):
@@ -22,6 +24,12 @@ def main():
     sub.add_parser("schedule")
     sub.add_parser("ui")
     sub.add_parser("demo")
+    history = sub.add_parser("backfill")
+    history.add_argument("--start-date", required=True)
+    history.add_argument("--end-date", required=True)
+    history.add_argument("--sync", action="store_true")
+    sub.add_parser("backfills")
+    sub.add_parser("resume-backfills")
     args = parser.parse_args()
     Path("logs").mkdir(exist_ok=True)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s", handlers=[logging.StreamHandler(), logging.FileHandler("logs/deployment_reporter.log")])
@@ -41,7 +49,19 @@ def main():
     if args.command == "batch":
         if args.search_only and args.sync:
             parser.error("--search-only cannot be combined with --sync")
-        output = reporter.batch(days=args.days, analyze=not args.search_only, sync=args.sync)
+        if bool(args.start_date) != bool(args.end_date) or (args.days is not None and args.start_date):
+            parser.error("날짜는 시작일/종료일을 함께 지정하고 --days와 동시에 사용하지 마세요")
+        output = reporter.batch(days=args.days, start_date=args.start_date, end_date=args.end_date, analyze=not args.search_only, sync=args.sync)
+    elif args.command == "backfill":
+        from .backfill import Backfills
+        manager = Backfills(reporter)
+        job = manager.create(args.start_date, args.end_date, sync=args.sync)
+        output = manager.run(job["id"])
+    elif args.command == "backfills":
+        output = reporter.repo.backfills()
+    elif args.command == "resume-backfills":
+        from .backfill import Backfills
+        output = Backfills(reporter).run_pending()
     elif args.command == "preview":
         output = reporter.preview(args.event_id)
     elif args.command in {"reanalyze", "retry"}:

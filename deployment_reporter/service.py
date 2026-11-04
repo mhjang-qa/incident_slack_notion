@@ -11,6 +11,7 @@ from .notion.client import NotionClient
 from .notion.sync import NotionSync
 from .notion.schema import summary_properties
 from .storage.repository import Repository, evidence_digest
+from .domain.period import DateRange
 
 LOG = logging.getLogger(__name__)
 RUNTIME_FIELDS = {"slack_channel_ids", "window_hours", "lookback_days", "poll_interval_seconds", "auto_sync"}
@@ -88,36 +89,71 @@ class Reporter:
         if event["sync_state"] != "Synced" or (analyses and event["notion_revision"] != analyses[0]["id"]):
             return NotionSync(self.notion, self.repo, self.settings).sync(event_id)
 
-    def batch(self, *, days=None, analyze=True, sync=None, clock=None):
+    def batch(self, *, days=None, analyze=True, sync=None, clock=None, start_date=None, end_date=None,
+              channels=None, backfill_job_id=None, max_events=None, deadline=None):
         self.apply_settings(self.repo.get_value("runtime", {}), persist=False)
         current = time.time() if clock is None else clock
         sync = self.settings.auto_sync if sync is None else sync
+        period = None
+        if start_date is not None or end_date is not None:
+            if days is not None:
+                raise ValueError("days와 날짜 범위는 함께 사용할 수 없습니다")
+            period = DateRange(start_date=start_date, end_date=end_date)
+            start, end = period.bounds(self.settings.timezone)
+            if start > current:
+                raise ValueError("미래 기간은 수집할 수 없습니다")
+        elif backfill_job_id:
+            raise ValueError("Backfill requires a date range")
         results = []
+        attempted = 0
         with self.repo.lock():
             workspace = self._workspace()
-            channels = self.settings.channels
+            channels = list(dict.fromkeys(channels if channels is not None else self.settings.channels))
             if not channels:
                 raise ValueError("Select at least one Slack channel")
+            managed = self.repo.backfill_event_ids()
             for channel in channels:
+                if deadline is not None and time.monotonic() >= deadline:
+                    results.append({"channel": channel, "pending": True})
+                    continue
                 known = [e for e in self.repo.events() if e["channel"] == channel and e["workspace"] == workspace]
                 # Revisit active events even when batch lookback is smaller than the tracking window.
-                active = [e for e in known if float(e["ts"]) + self.settings.window_hours * 3600 >= current or e["state"] in {"Failed", "Deferred", "Detected", "Analyzing"} or (e["stop_reason"] and not e["stop_reason"].startswith("window closed"))]
-                oldest = min([current - (days or self.settings.lookback_days) * 86400] + [float(e["ts"]) for e in active])
+                if period:
+                    active = [e for e in known if start <= float(e["ts"]) < end]
+                    oldest = start
+                    latest = min(current, end + self.settings.window_hours * 3600)
+                else:
+                    active = [e for e in known if (e["id"] not in managed or float(e["ts"]) + self.settings.window_hours * 3600 >= current) and
+                              (float(e["ts"]) + self.settings.window_hours * 3600 >= current or e["state"] in {"Failed", "Deferred", "Detected", "Analyzing"} or (e["stop_reason"] and not e["stop_reason"].startswith("window closed")))]
+                    oldest = min([current - (days or self.settings.lookback_days) * 86400] + [float(e["ts"]) for e in active])
+                    latest = current
                 try:
-                    messages = self.slack.history(channel, oldest, current)
+                    messages = self.slack.history(channel, oldest, latest)
                 except Exception as exc:
                     self.repo.log("Slack", "Channel collection failed; no events marked complete")
                     results.append({"channel": channel, "error": type(exc).__name__})
                     continue
                 event_ids = {e["id"] for e in active}
                 for root in candidates(messages):
+                    if period and not start <= float(root.ts) < end:
+                        continue
                     old = next((e for e in known if e["ts"] == root.ts), None)
                     edited = old and SlackMessage.model_validate_json(old["root"]).text != root.text
-                    if old is None or old["id"] in event_ids or edited:
+                    if period or old is None or old["id"] in event_ids or edited:
                         event_ids.add(self.repo.detect(root, workspace, ZoneInfo(self.settings.timezone)))
+                if backfill_job_id:
+                    for event_id in event_ids:
+                        self.repo.track_backfill_item(backfill_job_id, event_id)
                 self.repo.log("Slack", f"Detected/tracked {len(event_ids)} candidate events")
                 LOG.info("[Slack] detected/tracked=%d", len(event_ids))
                 for event_id in sorted(event_ids):
+                    if backfill_job_id and self.repo.backfill_item_done(backfill_job_id, event_id):
+                        results.append({"id": event_id, "unchanged": True})
+                        continue
+                    if (max_events is not None and attempted >= max_events) or (deadline is not None and time.monotonic() >= deadline):
+                        results.append({"id": event_id, "pending": True})
+                        continue
+                    attempted += 1
                     try:
                         event = self.repo.event(event_id)
                         root = SlackMessage.model_validate_json(event["root"])
@@ -138,6 +174,8 @@ class Reporter:
                         elif sync:
                             raise ValueError("Cannot sync an unanalysed search")
                         self.repo.log("Complete", "Event processing complete", event_id)
+                        if backfill_job_id and analyze:
+                            self.repo.finish_backfill_item(backfill_job_id, event_id)
                         LOG.info("[Complete] event=%s", event_id)
                         results.append({"id": event_id, "state": self.repo.event(event_id)["state"]})
                     except Exception as exc:

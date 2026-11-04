@@ -76,5 +76,5 @@ class Transport:
                 host = urlparse(url).hostname
                 provider = {"slack.com": "Slack", "api.notion.com": "Notion", "generativelanguage.googleapis.com": "Gemini"}.get(host, "API")
                 raise APIError(f"API HTTP {response.status_code} ({provider}); check credentials, permissions, schema and retry")
-            return response.json()
+            return response.json() if response.content else {}
         raise APIError("API retry limit reached")

@@ -13,3 +13,14 @@
 Notion 결과는 인증된 QA 페이지에서 확인하고, 실행 성공·실패는 GitHub Actions에서 확인합니다. 로컬 GUI는 보조 디버깅 도구입니다. GitHub 예약 실행은 정확한 시각을 보장하지 않으며 캐시 영속성도 별도 백업을 대체하지 않습니다.
 
 [GitHub 캐시 보안 지침](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching), [GitHub Secret 암호화 방식](https://docs.github.com/en/rest/guides/encrypting-secrets-for-the-rest-api)을 참고하세요.
+
+일일 Gemini 쿼터는 Deferred로 보존하고 RetryInfo 이후 예약 실행에서 자동 재개합니다. 이 대기는 일반 실패와 분리해 집계하며, 이미 처리한 Summary와 Raw Data는 다시 생성하지 않습니다.
+
+
+## 과거 수집 작업
+
+워크플로 수동 실행 입력 `mode=backfill`, `start_date=YYYY-MM-DD`, `end_date=YYYY-MM-DD`로 접수합니다. 종료일을 포함하며 공지 게시일 기준입니다. 최초 실행에서 날짜 범위와 채널을 고정해 durable backfill 작업을 생성하고, 모든 예약 실행에서 최근 배포 처리 후 미완료 과거 작업을 이어갑니다. 최신 공지가 없는 기존 Bot 참여 채널도 과거 수집 탐색에 포함합니다. 명시적인 배포 채널 변수가 있으면 그 채널만 사용합니다.
+
+과거 작업의 진행 위치와 처리한 Event는 암호화 캐시의 동일 SQLite에 보관됩니다. 실패·쿼터 대기·미처리 항목이 있으면 날짜를 넘기지 않습니다. 과거 작업이 관리하는 Window 밖의 대기 Event는 일반 최근 수집에서 다시 전체 조회하지 않아, 과거 요청 때문에 최근 배포 조회 범위가 수개월로 늘어나는 것을 방지합니다. 실제 배포/QA 완료를 추측하지 않는 기존 분석 정책은 동일합니다.
+
+Notion Deployment Report 상단의 프로그램 전용 **과거 수집 진행** Callout에서 확인할 수 있습니다. 캐시가 삭제되면 진행 위치를 완전히 복구할 수는 없지만 기존 Notion Source Key/Raw Record Key를 사용해 중복 생성을 방지합니다.

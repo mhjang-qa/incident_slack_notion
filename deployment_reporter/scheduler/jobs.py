@@ -28,6 +28,8 @@ class Scheduler:
         while not self.stop_event.is_set():
             try:
                 self.reporter.batch()
+                from ..backfill import Backfills
+                Backfills(self.reporter).run_pending()
             except Exception as exc:
                 LOG.error("Scheduler cycle failed: %s", type(exc).__name__)
                 self.reporter.repo.log("Scheduler", "Cycle failed; will retry next interval")

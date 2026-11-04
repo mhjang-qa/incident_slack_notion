@@ -53,6 +53,15 @@ class Repository:
                 );
                 CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS logs(id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT, stage TEXT NOT NULL, message TEXT NOT NULL, created_at TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS backfills (
+                    id TEXT PRIMARY KEY, request TEXT NOT NULL, cursor TEXT NOT NULL,
+                    state TEXT NOT NULL, last_result TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS backfill_items (
+                    job_id TEXT NOT NULL REFERENCES backfills(id), event_id TEXT NOT NULL REFERENCES events(id),
+                    done INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(job_id,event_id)
+                );
             ''')
             columns = {row[1] for row in db.execute("PRAGMA table_info(analyses)")}
             if "evidence" not in columns:
@@ -163,3 +172,47 @@ class Repository:
     def logs(self):
         with self.connection() as db:
             return [dict(r) for r in db.execute("SELECT * FROM logs ORDER BY id DESC LIMIT 200")]
+
+    def create_backfill(self, job_id, request):
+        with self.connection() as db:
+            db.execute("INSERT OR IGNORE INTO backfills(id,request,cursor,state,created_at,updated_at) VALUES(?,?,?,'Pending',?,?)",
+                       (job_id, dump(request), request["start_date"], now(), now()))
+        return self.backfill(job_id)
+
+    def backfill(self, job_id):
+        with self.connection() as db:
+            row = db.execute("SELECT * FROM backfills WHERE id=?", (job_id,)).fetchone()
+            stats = db.execute("SELECT COUNT(*),COALESCE(SUM(done),0) FROM backfill_items WHERE job_id=?", (job_id,)).fetchone()
+        if not row:
+            raise KeyError(job_id)
+        value = dict(row)
+        value["request"] = json.loads(value["request"])
+        value["last_result"] = json.loads(value["last_result"])
+        value["discovered"], value["processed"] = stats
+        return value
+
+    def backfills(self):
+        with self.connection() as db:
+            ids = [r[0] for r in db.execute("SELECT id FROM backfills ORDER BY created_at,id")]
+        return [self.backfill(job_id) for job_id in ids]
+
+    def update_backfill(self, job_id, cursor, state, result):
+        with self.connection() as db:
+            db.execute("UPDATE backfills SET cursor=?,state=?,last_result=?,updated_at=? WHERE id=?", (cursor,state,dump(result),now(),job_id))
+
+    def track_backfill_item(self, job_id, event_id):
+        with self.connection() as db:
+            db.execute("INSERT OR IGNORE INTO backfill_items(job_id,event_id) VALUES(?,?)", (job_id,event_id))
+
+    def backfill_item_done(self, job_id, event_id):
+        with self.connection() as db:
+            row = db.execute("SELECT done FROM backfill_items WHERE job_id=? AND event_id=?", (job_id,event_id)).fetchone()
+        return bool(row and row[0])
+
+    def finish_backfill_item(self, job_id, event_id):
+        with self.connection() as db:
+            db.execute("UPDATE backfill_items SET done=1 WHERE job_id=? AND event_id=?", (job_id,event_id))
+
+    def backfill_event_ids(self):
+        with self.connection() as db:
+            return {r[0] for r in db.execute("SELECT DISTINCT event_id FROM backfill_items")}

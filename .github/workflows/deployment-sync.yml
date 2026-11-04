@@ -1,4 +1,5 @@
 name: Slack deployment to Notion
+run-name: "${{ inputs.mode == 'backfill' && format('Backfill {0} to {1}', inputs.start_date, inputs.end_date) || 'Deployment sync' }}"
 
 on:
   push:
@@ -11,6 +12,20 @@ on:
   schedule:
     - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'sync: 최근 배포 자동 수집 / backfill: 과거 기간 수집 요청'
+        type: choice
+        options: [sync, backfill]
+        default: sync
+      start_date:
+        description: '과거 공지 시작일 (YYYY-MM-DD, 예: 2026-10-01)'
+        type: string
+        default: ''
+      end_date:
+        description: '과거 공지 종료일 (포함, 예: 2026-10-31)'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -41,6 +56,9 @@ jobs:
       WINDOW_HOURS: '48'
       LOOKBACK_DAYS: '7'
       TIMEZONE: Asia/Seoul
+      BACKFILL_START_DATE: ${{ inputs.mode == 'backfill' && inputs.start_date || '' }}
+      BACKFILL_END_DATE: ${{ inputs.mode == 'backfill' && inputs.end_date || '' }}
+      BACKFILL_REQUESTED: ${{ inputs.mode == 'backfill' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6

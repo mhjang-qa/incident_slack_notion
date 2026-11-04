@@ -8,6 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..config import load_settings
 from ..service import Reporter
 from ..scheduler.jobs import Scheduler
+from ..domain.period import DateRange
+from ..backfill import Backfills
+from ..actions import CloudBackfills
 
 
 class BatchRequest(BaseModel):
@@ -68,6 +71,22 @@ def create_app(reporter=None):
     def automation():
         path = Path("config/cloud.json")
         return json.loads(path.read_text()) if path.exists() else {"enabled": False}
+
+    @app.post("/api/cloud/backfills")
+    def cloud_backfill(body: DateRange):
+        return CloudBackfills(reporter.settings.timezone).request(body.start_date, body.end_date)
+
+    @app.get("/api/backfills")
+    def backfills():
+        return reporter.repo.backfills()
+
+    @app.post("/api/backfills")
+    def create_backfill(body: DateRange):
+        return Backfills(reporter).create(body.start_date, body.end_date, sync=False)
+
+    @app.post("/api/backfills/{job_id}/run")
+    def run_backfill(job_id: str):
+        return Backfills(reporter).run(job_id)
 
     @app.put("/api/settings")
     def update_settings(changes: dict):

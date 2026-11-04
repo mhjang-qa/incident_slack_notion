@@ -14,6 +14,8 @@ from .slack.client import SlackClient
 from .slack.detector import candidates
 from .storage.repository import Repository
 from .storage.encrypted import restore_state, save_state
+from .backfill import Backfills, progress_text
+from .domain.period import DateRange
 
 
 def page_title(page):
@@ -82,6 +84,10 @@ def run():
     for name in ("httpx", "httpcore"):
         logging.getLogger(name).setLevel(logging.WARNING)
     settings = load_settings()
+    start_date = os.getenv("BACKFILL_START_DATE", "")
+    end_date = os.getenv("BACKFILL_END_DATE", "")
+    requested = os.getenv("BACKFILL_REQUESTED", "").lower() == "true"
+    period = DateRange(start_date=start_date, end_date=end_date).require_past(settings.timezone) if requested or start_date or end_date else None
     # Deployment-specific overrides never overwrite the incident workflow's configuration.
     settings.slack_channel_ids = os.getenv("DEPLOYMENT_SLACK_CHANNEL_IDS", "")
     parent = os.getenv("DEPLOYMENT_NOTION_PAGE_ID", "")
@@ -108,9 +114,30 @@ def run():
         settings.auto_sync = True
         reporter = Reporter(settings, repo=repo, slack=slack, notion=notion)
         reporter.gemini.test()
+        history = Backfills(reporter)
+        if period:
+            if os.getenv("DEPLOYMENT_SLACK_CHANNEL_IDS"):
+                historical_channels = settings.channels
+            else:
+                # Include joined channels with no recent notices; October-only channels must remain eligible.
+                try:
+                    historical_channels = [c["id"] for c in slack.channels() if c.get("is_member") and not c.get("is_archived")]
+                except APIError:
+                    historical_channels = settings.channels
+            history.create(period.start_date, period.end_date, channels=historical_channels, sync=True)
         with repo.lock():
             layout = bootstrap(notion, repo, settings.notion_page_id)
         results = reporter.batch(sync=True)
+        historical = history.run_pending(max_days=3, max_events=10, budget_seconds=600)
+        if historical:
+            print(f'Backfill: state={historical["state"]} processed={historical["processed"]} discovered={historical["discovered"]} next_date={historical["cursor"]}')
+            failures_in_history = historical["last_result"].get("failed", 0)
+            # Actual failures remain visible; quota deferral is a persisted waiting state.
+            if failures_in_history:
+                results.append({"error": "Historical collection failed; saved for automatic retry"})
+        jobs = repo.backfills()
+        if jobs:
+            notion.current_sections(layout["root"], {"과거 수집 진행": progress_text(jobs)})
         failures = sum("error" in r and not r.get("deferred") for r in results)
         deferred = sum(bool(r.get("deferred")) for r in results)
         print(f"Deployment sync: checked={len(results)} failed={failures} deferred_for_quota={deferred}")
